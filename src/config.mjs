@@ -13,6 +13,17 @@ function integer(name, fallback, min, max) {
   return Math.max(min, Math.min(max, parsed));
 }
 
+function list(name, fallback = []) {
+  const value = process.env[name];
+  if (value == null || value.trim() === '') return [...fallback];
+  return [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))];
+}
+
+function choice(name, fallback, allowed) {
+  const value = (process.env[name] || '').trim().toLowerCase();
+  return allowed.includes(value) ? value : fallback;
+}
+
 const home = os.homedir();
 const stateHome = process.env.XDG_STATE_HOME || path.join(home, '.local', 'state');
 const configHome = process.env.XDG_CONFIG_HOME || path.join(home, '.config');
@@ -28,6 +39,8 @@ export const config = Object.freeze({
   experimental: bool('CWEB_EXPERIMENTAL', false),
   publicOrigin: process.env.CWEB_PUBLIC_ORIGIN || '',
   token: process.env.CWEB_TOKEN || '',
+  accessProfile: choice('CWEB_ACCESS_PROFILE', 'full', ['read', 'coding', 'admin', 'full']),
+  notificationOptOut: list('CWEB_NOTIFICATION_OPT_OUT'),
   rpcTimeoutMs: integer('CWEB_RPC_TIMEOUT_MS', 600_000, 1_000, 3_600_000),
   bodyLimit: integer('CWEB_BODY_LIMIT', 2 * 1024 * 1024, 16 * 1024, 32 * 1024 * 1024),
   maxPendingRpc: integer('CWEB_MAX_PENDING_RPC', 64, 1, 512),
