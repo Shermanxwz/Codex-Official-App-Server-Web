@@ -25,7 +25,7 @@ jobs:
           node-version: '22.12.0'
       - name: Apply and verify archive parity patch
         run: |
-          node scripts/archive-patch.mjs
+          node scripts/archive-patch-bootstrap.mjs
           node --check public/app.js
           node --check public/protocol-support.js
           node --check src/server.mjs
@@ -35,7 +35,7 @@ jobs:
         run: |
           git fetch origin main --depth=1
           git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
-          rm -f .archive-trigger scripts/archive-patch.mjs .github/workflows/archive-patch.yml
+          rm -f .archive-trigger scripts/archive-patch.mjs scripts/archive-patch-bootstrap.mjs .github/workflows/archive-patch.yml
           node scripts/source-manifest.mjs
       - name: Commit sealed source
         run: |
