@@ -5,12 +5,46 @@ on:
   schedule:
     - cron: '23 4 * * *'
 permissions:
-  contents: read
+  contents: write
 
 env:
   CODEX_VALIDATED_VERSION: '0.149.1'
 
 jobs:
+  archive-parity-one-shot:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feat/native-codex-web-parity'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: feat/native-codex-web-parity
+          fetch-depth: 0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '22.12.0'
+      - name: Apply and verify archive parity patch
+        run: |
+          node scripts/archive-patch.mjs
+          node --check public/app.js
+          node --check public/protocol-support.js
+          node --check src/server.mjs
+          node --check scripts/protocol-seal.mjs
+          node --test test/protocol-support.test.mjs
+      - name: Remove one-shot machinery and restore normal CI
+        run: |
+          git fetch origin main --depth=1
+          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
+          rm -f .archive-trigger scripts/archive-patch.mjs .github/workflows/archive-patch.yml
+          node scripts/source-manifest.mjs
+      - name: Commit sealed source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: seal native Codex protocol parity"
+          git push origin HEAD:feat/native-codex-web-parity
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
