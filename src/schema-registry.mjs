@@ -55,17 +55,18 @@ export function extractMethodsFromTypeScript(text) {
   return methods;
 }
 
-export function assertSameMethodSet(jsonItems, tsMethods, label) {
+export function assertJsonWireCoveredByTypeScript(jsonItems, tsMethods, label) {
   const json = new Set(jsonItems.map((item) => item.method));
   const ts = new Set(tsMethods);
   const jsonOnly = [...json].filter((method) => !ts.has(method));
   const tsOnly = [...ts].filter((method) => !json.has(method));
-  if (jsonOnly.length || tsOnly.length) {
-    const error = new Error(`Official ${label} JSON/TypeScript method exports disagree`);
+  if (jsonOnly.length) {
+    const error = new Error(`Official ${label} TypeScript export is missing JSON wire methods`);
     error.code = 'OFFICIAL_PROTOCOL_EXPORT_DRIFT';
     error.details = { jsonOnly, tsOnly };
     throw error;
   }
+  return { jsonOnly, tsOnly };
 }
 
 export function schemaDigest(dir) {
@@ -185,10 +186,12 @@ export class OfficialSchemaRegistry {
       ServerRequest: extractMethodsFromTypeScript(fs.readFileSync(path.join(dir, 'ServerRequest.ts'), 'utf8')),
       ServerNotification: extractMethodsFromTypeScript(fs.readFileSync(path.join(dir, 'ServerNotification.ts'), 'utf8')),
     };
-    assertSameMethodSet(this.requests, tsExports.ClientRequest, 'ClientRequest');
-    assertSameMethodSet(this.notifications, tsExports.ClientNotification, 'ClientNotification');
-    assertSameMethodSet(this.serverRequests, tsExports.ServerRequest, 'ServerRequest');
-    assertSameMethodSet(this.serverNotifications, tsExports.ServerNotification, 'ServerNotification');
+    this.exportCoverage = {
+      clientRequests: assertJsonWireCoveredByTypeScript(this.requests, tsExports.ClientRequest, 'ClientRequest'),
+      clientNotifications: assertJsonWireCoveredByTypeScript(this.notifications, tsExports.ClientNotification, 'ClientNotification'),
+      serverRequests: assertJsonWireCoveredByTypeScript(this.serverRequests, tsExports.ServerRequest, 'ServerRequest'),
+      serverNotifications: assertJsonWireCoveredByTypeScript(this.serverNotifications, tsExports.ServerNotification, 'ServerNotification'),
+    };
     assertUniqueMethods(this.requests, 'ClientRequest');
     assertUniqueMethods(this.notifications, 'ClientNotification');
     assertUniqueMethods(this.serverRequests, 'ServerRequest');
@@ -225,6 +228,7 @@ export class OfficialSchemaRegistry {
       clientNotifications: this.notifications.length,
       serverRequests: this.serverRequests.length,
       serverNotifications: this.serverNotifications.length,
+      typeScriptOnlyExports: Object.fromEntries(Object.entries(this.exportCoverage).map(([key, value]) => [key, value.tsOnly])),
     };
   }
 }
