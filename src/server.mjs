@@ -10,7 +10,7 @@ import {
   readJson, safeEqualText, sameOrigin, secureHeaders,
 } from './security.mjs';
 
-const APP_VERSION = '0.2.1';
+const APP_VERSION = '0.3.0';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = path.join(root, 'public');
 const schemaDir = path.join(config.stateDir, config.experimental ? 'schema-experimental' : 'schema-stable');
@@ -46,16 +46,22 @@ try {
   process.exit(3);
 }
 
+const clientCapabilities = {
+  ...(config.notificationOptOut.length ? { optOutNotificationMethods: config.notificationOptOut } : {}),
+};
+
 const codex = new CodexAppServer({
   codexBin: config.codexBin,
   cwd: config.workspace,
   experimental: config.experimental,
+  capabilities: clientCapabilities,
   timeoutMs: config.rpcTimeoutMs,
   maxPending: config.maxPendingRpc,
   maxServerRequests: config.maxPendingRpc,
   maxStdinBufferBytes: config.maxStdinBufferBytes,
   maxLineBytes: config.maxJsonlLineBytes,
 });
+
 const sessions = new SessionStore();
 const loginRate = new SlidingRateLimit(6, 60_000);
 const sseClients = new Set();
@@ -63,6 +69,50 @@ let fatalCodexError = null;
 let restartTimer = null;
 let restartAttempt = 0;
 let eventSequence = 0;
+
+const MACHINE_ONLY_SERVER_REQUESTS = new Set([
+  'attestation/generate',
+  'account/chatgptAuthTokens/refresh',
+]);
+
+const CODING_PROFILE_DENY = [
+  /^account\/(login|logout|chatgptAuthTokens)/,
+  /^config\/(value\/write|batchWrite|mcpServer\/reload)/,
+  /^externalAgentConfig\/import/,
+  /^feedback\/upload/,
+  /^plugin\/(install|uninstall|share\/save)/,
+  /^remoteControl\//,
+];
+
+const ADMIN_PROFILE_DENY = [
+  /^command\/exec(?:\/|$)/,
+];
+
+function methodRisk(method) {
+  const name = String(method || '');
+  if (
+    /\/(list|read|status|installed|detect|searchOccurrences)$/.test(name)
+    || /^(model\/list|account\/read|config\/read|configRequirements\/read|server\/diagnostics)$/.test(name)
+  ) return 'read';
+  if (
+    /\/(delete|uninstall|revoke|terminate)$/.test(name)
+    || /^command\/exec(?:\/|$)/.test(name)
+    || /^config\/(value\/write|batchWrite)$/.test(name)
+  ) return 'danger';
+  if (
+    /\/(create|update|write|install|import|move|start|resume|fork|interrupt|enable|disable|call|upload|login|logout|archive|unarchive)$/.test(name)
+  ) return 'write';
+  return 'standard';
+}
+
+function accessAllows(method) {
+  const profile = config.accessProfile;
+  if (profile === 'full') return true;
+  if (profile === 'read') return methodRisk(method) === 'read';
+  if (profile === 'coding') return !CODING_PROFILE_DENY.some((pattern) => pattern.test(method));
+  if (profile === 'admin') return !ADMIN_PROFILE_DENY.some((pattern) => pattern.test(method));
+  return false;
+}
 
 function eventFrame(type, payload) {
   const event = { type, payload, at: Date.now(), sequence: ++eventSequence };
@@ -97,10 +147,24 @@ function rejectUnknownServerRequest(message) {
   } catch { /* child may already be gone */ }
 }
 
+function rejectMachineOnlyServerRequest(message) {
+  try {
+    codex.respondError(message.id, {
+      code: -32601,
+      message: `Codex App Server Web does not advertise or implement the platform-only client capability required by ${message.method}`,
+    });
+  } catch { /* child may already be gone */ }
+  pushEvent('serverRequestUnsupported', { method: message.method, reason: 'platform-only-client-capability' });
+}
+
 codex.on('serverRequest', (message) => {
   if (!registry.getServerRequest(message.method)) {
     pushEvent('protocolMismatch', { direction: 'serverRequest', method: message.method });
     rejectUnknownServerRequest(message);
+    return;
+  }
+  if (MACHINE_ONLY_SERVER_REQUESTS.has(message.method)) {
+    rejectMachineOnlyServerRequest(message);
     return;
   }
   const bytes = Buffer.byteLength(JSON.stringify(message));
@@ -111,6 +175,7 @@ codex.on('serverRequest', (message) => {
   }
   pushEvent('serverRequest', message);
 });
+
 codex.on('notification', (message) => {
   if (!registry.getServerNotification(message.method)) {
     pushEvent('protocolMismatch', { direction: 'serverNotification', method: message.method });
@@ -180,6 +245,8 @@ function methodSummary(item) {
     description: item.description,
     paramsRef: item.paramsRef,
     managed: item.method === 'initialize' || item.method === 'initialized',
+    risk: methodRisk(item.method),
+    allowed: accessAllows(item.method),
   };
 }
 
@@ -198,7 +265,8 @@ function serveStatic(req, res, pathname) {
   res.writeHead(200, secureHeaders({
     'Content-Type': types[path.extname(target)] || 'application/octet-stream',
     'Content-Length': stat.size,
-    'Cache-Control': path.extname(target) === '.html' ? 'no-store' : 'public, max-age=3600',
+    // Assets are not content-hashed; revalidate them so HTML/JS/CSS cannot drift across deployments.
+    'Cache-Control': 'no-cache',
   }));
   fs.createReadStream(target).pipe(res);
   return true;
@@ -241,6 +309,19 @@ async function api(req, res, url) {
       error: fatalCodexError,
       schema: registry.summary(),
       initializeResult,
+      access: {
+        profile: config.accessProfile,
+      },
+      capabilities: {
+        experimentalApi: config.experimental,
+        extensions: {
+          'openai/form': {},
+          'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] },
+        },
+        optOutNotificationMethods: config.notificationOptOut,
+        requestAttestation: false,
+        platformOnlyServerRequests: [...MACHINE_ONLY_SERVER_REQUESTS],
+      },
       contract: {
         officialAppServerOnly: true,
         directCodexStateMutation: false,
@@ -248,6 +329,8 @@ async function api(req, res, url) {
         transport: 'stdio',
         bidirectionalSchemaGate: true,
         codexEnvironmentSecretsStripped: true,
+        accessPolicyGate: true,
+        nativeItemTimeline: true,
       },
     });
   }
@@ -278,7 +361,7 @@ async function api(req, res, url) {
     }));
     try { res.socket?.setNoDelay?.(true); } catch { /* ignore */ }
     const connected = eventFrame('connected', {
-      pendingServerRequests: codex.pendingServerRequests(),
+      pendingServerRequests: codex.pendingServerRequests().filter((item) => !MACHINE_ONLY_SERVER_REQUESTS.has(item.method)),
       codexReady: codex.isReady(),
       eventSequence,
     });
@@ -297,6 +380,7 @@ async function api(req, res, url) {
     const descriptor = registry.getRequest(body.method);
     if (!descriptor) return json(res, 400, { error: 'METHOD_NOT_IN_OFFICIAL_SCHEMA', method: body.method });
     if (body.method === 'initialize') return json(res, 400, { error: 'INITIALIZE_IS_MANAGED_BY_GATEWAY' });
+    if (!accessAllows(body.method)) return json(res, 403, { error: 'METHOD_BLOCKED_BY_ACCESS_PROFILE', method: body.method, profile: config.accessProfile });
     const result = await codex.request(body.method, body.params ?? {});
     return json(res, 200, { result });
   }
@@ -307,6 +391,7 @@ async function api(req, res, url) {
     if (body.method === 'initialized') return json(res, 400, { error: 'INITIALIZED_IS_MANAGED_BY_GATEWAY' });
     const descriptor = registry.getNotification(body.method);
     if (!descriptor) return json(res, 400, { error: 'NOTIFICATION_NOT_IN_OFFICIAL_SCHEMA', method: body.method });
+    if (!accessAllows(body.method)) return json(res, 403, { error: 'METHOD_BLOCKED_BY_ACCESS_PROFILE', method: body.method, profile: config.accessProfile });
     await codex.notify(body.method, body.params ?? {});
     return json(res, 200, { ok: true });
   }
@@ -317,6 +402,7 @@ async function api(req, res, url) {
     const pending = codex.pendingServerRequests().find((item) => String(item.id) === String(body.id));
     if (!pending) return json(res, 404, { error: 'SERVER_REQUEST_NOT_PENDING' });
     if (!registry.getServerRequest(pending.method)) return json(res, 409, { error: 'SERVER_REQUEST_NOT_IN_OFFICIAL_SCHEMA' });
+    if (MACHINE_ONLY_SERVER_REQUESTS.has(pending.method)) return json(res, 409, { error: 'PLATFORM_ONLY_SERVER_REQUEST', method: pending.method });
     if (body.error) codex.respondError(body.id, body.error);
     else codex.respond(body.id, body.result ?? {});
     return json(res, 200, { ok: true });
@@ -366,6 +452,7 @@ server.listen(config.port, config.host, async () => {
   console.log(`Codex App Server Web listening on http://${config.host}:${config.port}`);
   console.log(`Codex: ${registry.version}`);
   console.log(`Official schema: ${registry.digest.slice(0, 16)} (${registry.requests.length} requests)`);
+  console.log(`Access profile: ${config.accessProfile}`);
   try { await codex.start(); }
   catch (error) { fatalCodexError = error.message; console.error(`Codex App Server failed: ${error.message}`); scheduleCodexRestart(); }
 });
