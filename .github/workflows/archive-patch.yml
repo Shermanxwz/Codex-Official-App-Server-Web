@@ -1,0 +1,40 @@
+name: archive-parity-patch
+
+on:
+  push:
+    branches:
+      - feat/native-codex-web-parity
+    paths:
+      - .archive-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: feat/native-codex-web-parity
+          fetch-depth: 0
+      - name: Apply archive parity patch
+        run: node scripts/archive-patch.mjs
+      - name: Syntax and static tests
+        run: |
+          node --check public/app.js
+          node --check public/protocol-support.js
+          node --check src/server.mjs
+          node --check scripts/protocol-seal.mjs
+          node --test test/protocol-support.test.mjs
+      - name: Remove one-shot patch machinery and refresh source manifest
+        run: |
+          rm -f .archive-trigger scripts/archive-patch.mjs .github/workflows/archive-patch.yml
+          node scripts/source-manifest.mjs
+      - name: Commit sealed patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: seal native Codex protocol parity"
+          git push origin HEAD:feat/native-codex-web-parity
