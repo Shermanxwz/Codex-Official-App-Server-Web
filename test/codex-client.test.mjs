@@ -12,7 +12,7 @@ function fakeCodex(){
   fs.writeFileSync(file,`#!/usr/bin/env node
 const readline=require('node:readline');
 const rl=readline.createInterface({input:process.stdin});
-rl.on('line',line=>{const m=JSON.parse(line); if(m.method==='initialize'){console.log(JSON.stringify({id:m.id,result:{codexHome:'/fake',platformFamily:'unix',platformOs:'linux'}}));return;} if(m.method==='initialized')return; if(m.method==='thread/list'){console.log(JSON.stringify({id:m.id,result:{data:[{id:'t1',preview:'hello'}]}}));return;} if(m.method==='test/requestServer'){console.log(JSON.stringify({id:m.id,result:{ok:true}})); console.log(JSON.stringify({id:99,method:'item/commandExecution/requestApproval',params:{threadId:'t1'}})); return;} if(m.id!==undefined) console.log(JSON.stringify({id:m.id,result:{echo:m.params}}));});
+rl.on('line',line=>{const m=JSON.parse(line); if(m.method==='initialize'){console.log(JSON.stringify({id:m.id,result:{codexHome:'/fake',platformFamily:'unix',platformOs:'linux'}}));return;} if(m.method==='initialized')return; if(m.method==='thread/list'){console.log(JSON.stringify({id:m.id,result:{data:[{id:'t1',preview:'hello'}]}}));return;} if(m.method==='test/requestServer'){console.log(JSON.stringify({id:m.id,result:{ok:true}})); console.log(JSON.stringify({id:99,method:'item/commandExecution/requestApproval',params:{threadId:'t1'}})); return;} if(m.method==='test/manyServerRequests'){console.log(JSON.stringify({id:m.id,result:{ok:true}})); for(let i=0;i<3;i++) console.log(JSON.stringify({id:200+i,method:'item/commandExecution/requestApproval',params:{n:i}})); return;} if(m.method==='test/crash'){process.exit(42)} if(m.method==='test/hang')return; if(m.id!==undefined) console.log(JSON.stringify({id:m.id,result:{echo:m.params}}));});
 `,{mode:0o755});
   return {dir,file};
 }
@@ -27,4 +27,42 @@ test('CodexAppServer performs handshake, RPC, and server-request response on its
   const [request]=await serverRequestPromise; assert.equal(request.id,99);
   client.respond(99,{decision:'accept'});
   assert.equal(client.pendingServerRequests().length,0);
+});
+
+test('unexpected child exit clears stale approvals and permits a fresh official app-server start', async(t)=>{
+  const fake=fakeCodex(); t.after(()=>fs.rmSync(fake.dir,{recursive:true,force:true}));
+  const client=new CodexAppServer({codexBin:fake.file,cwd:fake.dir,timeoutMs:1000}); t.after(()=>client.close());
+  await client.start();
+  const requestPromise=once(client,'serverRequest');
+  await client.request('test/requestServer',{});
+  await requestPromise;
+  assert.equal(client.pendingServerRequests().length,1);
+  const crashEvent=once(client,'crash');
+  await assert.rejects(client.request('test/crash',{}));
+  await crashEvent;
+  assert.equal(client.pendingServerRequests().length,0);
+  const list=await client.request('thread/list',{});
+  assert.equal(list.data[0].id,'t1');
+});
+
+test('pending RPC count is bounded before writes can grow without limit', async(t)=>{
+  const fake=fakeCodex(); t.after(()=>fs.rmSync(fake.dir,{recursive:true,force:true}));
+  const client=new CodexAppServer({codexBin:fake.file,cwd:fake.dir,timeoutMs:5000,maxPending:1});
+  await client.start();
+  const first=client.request('test/hang',{});
+  await assert.rejects(client.request('thread/list',{}),error=>error.code==='CODEX_CLIENT_BUSY' && error.status===503);
+  client.close();
+  await assert.rejects(first,/closed/i);
+});
+
+
+test('pending server-initiated request memory is bounded', async(t)=>{
+  const fake=fakeCodex(); t.after(()=>fs.rmSync(fake.dir,{recursive:true,force:true}));
+  const client=new CodexAppServer({codexBin:fake.file,cwd:fake.dir,timeoutMs:2000,maxServerRequests:1}); t.after(()=>client.close());
+  await client.start();
+  const protocolError=once(client,'protocolError');
+  await client.request('test/manyServerRequests',{});
+  await protocolError;
+  await new Promise(resolve=>setTimeout(resolve,20));
+  assert.equal(client.pendingServerRequests().length,1);
 });

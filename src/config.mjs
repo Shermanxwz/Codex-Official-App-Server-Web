@@ -30,4 +30,10 @@ export const config = Object.freeze({
   token: process.env.CWEB_TOKEN || '',
   rpcTimeoutMs: integer('CWEB_RPC_TIMEOUT_MS', 600_000, 1_000, 3_600_000),
   bodyLimit: integer('CWEB_BODY_LIMIT', 2 * 1024 * 1024, 16 * 1024, 32 * 1024 * 1024),
+  maxPendingRpc: integer('CWEB_MAX_PENDING_RPC', 64, 1, 512),
+  maxStdinBufferBytes: integer('CWEB_MAX_STDIN_BUFFER', 4 * 1024 * 1024, 64 * 1024, 64 * 1024 * 1024),
+  maxJsonlLineBytes: integer('CWEB_MAX_JSONL_LINE', 32 * 1024 * 1024, 1024 * 1024, 128 * 1024 * 1024),
+  sseMaxBufferBytes: integer('CWEB_SSE_MAX_BUFFER', 2 * 1024 * 1024, 64 * 1024, 32 * 1024 * 1024),
+  eventMaxBytes: integer('CWEB_EVENT_MAX_BYTES', 16 * 1024 * 1024, 1024 * 1024, 64 * 1024 * 1024),
+  restartMaxDelayMs: integer('CWEB_RESTART_MAX_DELAY_MS', 30_000, 1_000, 120_000),
 });

@@ -88,11 +88,17 @@ export function isLoopbackHost(host) {
 }
 
 export class SessionStore {
-  constructor(ttlMs = 12 * 60 * 60 * 1000) {
+  constructor(ttlMs = 12 * 60 * 60 * 1000, maxSessions = 256) {
     this.ttlMs = ttlMs;
+    this.maxSessions = maxSessions;
     this.sessions = new Map();
   }
+  #prune(now = Date.now()) {
+    for (const [token, expiresAt] of this.sessions) if (expiresAt <= now) this.sessions.delete(token);
+    while (this.sessions.size >= this.maxSessions) this.sessions.delete(this.sessions.keys().next().value);
+  }
   create() {
+    this.#prune();
     const token = randomToken();
     this.sessions.set(token, Date.now() + this.ttlMs);
     return token;
@@ -107,16 +113,27 @@ export class SessionStore {
     return true;
   }
   delete(token) { this.sessions.delete(token); }
+  get size() { return this.sessions.size; }
 }
 
 export class SlidingRateLimit {
-  constructor(max, windowMs) {
+  constructor(max, windowMs, maxKeys = 4096) {
     this.max = max;
     this.windowMs = windowMs;
+    this.maxKeys = maxKeys;
     this.entries = new Map();
+  }
+  #pruneKeys(now) {
+    for (const [key, list] of this.entries) {
+      const fresh = list.filter((x) => x > now - this.windowMs);
+      if (fresh.length) this.entries.set(key, fresh);
+      else this.entries.delete(key);
+    }
+    while (this.entries.size >= this.maxKeys) this.entries.delete(this.entries.keys().next().value);
   }
   allow(key) {
     const now = Date.now();
+    if (!this.entries.has(key) && this.entries.size >= this.maxKeys) this.#pruneKeys(now);
     const list = (this.entries.get(key) || []).filter((x) => x > now - this.windowMs);
     if (list.length >= this.max) {
       this.entries.set(key, list);
@@ -126,4 +143,5 @@ export class SlidingRateLimit {
     this.entries.set(key, list);
     return true;
   }
+  get size() { return this.entries.size; }
 }

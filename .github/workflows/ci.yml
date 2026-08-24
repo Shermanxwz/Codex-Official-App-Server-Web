@@ -2,28 +2,56 @@ name: ci
 on:
   push:
   pull_request:
+  schedule:
+    - cron: '23 4 * * *'
 permissions:
   contents: read
+
+env:
+  CODEX_VALIDATED_VERSION: '0.149.1'
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '22.12.0'
           cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run manifest:verify
       - run: npm test
       - run: npm run check
-  official-schema-latest:
+
+  official-schema-pinned:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '22.12.0'
           cache: npm
-      - name: Install current official Codex for compatibility test
-        run: npm install -g @openai/codex
-      - name: Core seal against current stable official schema
+      - run: npm ci --ignore-scripts
+      - name: Install archive-validated official Codex
+        run: npm install -g "@openai/codex@${CODEX_VALIDATED_VERSION}"
+      - name: Seal core against pinned official stable protocol
+        run: npm run seal:core
+
+  official-schema-latest-advisory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.12.0'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Install current official Codex for forward-compatibility advisory
+        run: npm install -g @openai/codex@latest
+      - name: Check current stable official protocol
         run: npm run seal:core

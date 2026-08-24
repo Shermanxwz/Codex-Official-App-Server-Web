@@ -2,7 +2,7 @@ const $ = (id) => document.getElementById(id);
 const state = {
   lang: localStorage.getItem('cweb_lang') || (navigator.language.startsWith('zh') ? 'zh' : 'en'),
   meta: null, methods: null, currentThread: null, activeTurnId: null, eventSource: null,
-  threads: [], selectedMethod: null, pendingRequests: new Map(),
+  threads: [], selectedMethod: null, pendingRequests: new Map(), models: [], eventConnectedOnce: false,
 };
 
 const T = {
@@ -12,6 +12,7 @@ const T = {
     prompt:'给 Codex 发送消息…', send:'发送', searchMethods:'搜索 method', schema:'参数 Schema', params:'参数 JSON', invoke:'调用', loginSub:'安全登录', accessToken:'访问令牌', login:'登录',
     user:'你', agent:'Codex', loading:'加载中…', ready:'就绪', degraded:'Codex 连接异常', noThreads:'暂无会话', created:'已创建', request:'需要你的确认', accept:'允许', acceptSession:'本会话允许', decline:'拒绝', cancel:'拒绝并停止', respond:'提交响应', invalidJson:'JSON 格式错误', invoking:'调用中…',
     threadCreateFailed:'新建会话失败', sendFailed:'发送失败', reconnect:'事件流已断开，正在重连', connected:'已连接', interfaceCount:'官方接口', experimental:'实验接口已开启', stable:'Stable-only',
+    model:'模型', reasoning:'推理强度', defaultValue:'默认', protocolMismatch:'检测到上游协议变化，已按官方 schema 拒绝未知事件', resyncing:'正在重新同步…',
   },
   en: {
     officialClient:'Official App Server Web Client', newThread:'New thread', searchThreads:'Search threads', protocol:'Official APIs', logout:'Log out',
@@ -19,6 +20,7 @@ const T = {
     prompt:'Message Codex…', send:'Send', searchMethods:'Search methods', schema:'Parameter schema', params:'Parameters JSON', invoke:'Invoke', loginSub:'Secure sign in', accessToken:'Access token', login:'Sign in',
     user:'You', agent:'Codex', loading:'Loading…', ready:'Ready', degraded:'Codex connection degraded', noThreads:'No threads yet', created:'Created', request:'Your confirmation is required', accept:'Allow', acceptSession:'Allow for session', decline:'Decline', cancel:'Decline & stop', respond:'Submit response', invalidJson:'Invalid JSON', invoking:'Invoking…',
     threadCreateFailed:'Failed to create thread', sendFailed:'Failed to send', reconnect:'Event stream disconnected; reconnecting', connected:'Connected', interfaceCount:'official methods', experimental:'Experimental enabled', stable:'Stable-only',
+    model:'Model', reasoning:'Reasoning', defaultValue:'Default', protocolMismatch:'Upstream protocol changed; an unknown event was rejected by the official-schema gate', resyncing:'Resynchronizing…',
   }
 };
 function tr(key){ return T[state.lang][key] || key; }
@@ -26,7 +28,8 @@ function applyI18n(){
   document.documentElement.lang = state.lang === 'zh' ? 'zh-CN' : 'en';
   document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = tr(el.dataset.i18n));
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => el.placeholder = tr(el.dataset.i18nPlaceholder));
-  renderThreads(); renderApprovals(); updateStatus();
+  document.querySelectorAll('[data-i18n-title]').forEach(el => el.title = tr(el.dataset.i18nTitle));
+  renderThreads(); renderApprovals(); renderModelControls(); updateStatus();
 }
 
 async function api(path, options={}) {
@@ -41,8 +44,8 @@ async function api(path, options={}) {
 async function rpc(method, params={}) { return (await api('/api/rpc',{method:'POST',body:JSON.stringify({method,params})})).result; }
 async function notify(method, params={}) { return api('/api/notify',{method:'POST',body:JSON.stringify({method,params})}); }
 async function respond(id, result){ return api('/api/respond',{method:'POST',body:JSON.stringify({id,result})}); }
+function hasRequest(method){ return Boolean(state.methods?.requests?.some(item => item.method === method)); }
 
-function escapeText(value){ return String(value ?? ''); }
 function shortDate(seconds){
   if (!seconds) return '';
   const ms = seconds > 10_000_000_000 ? seconds : seconds * 1000;
@@ -59,13 +62,14 @@ async function refreshThreads(){
   } catch (error) { console.warn(error); }
 }
 function renderThreads(){
+  if (!$('threadList')) return;
   const q = $('threadSearch').value.trim().toLowerCase();
   const list = state.threads.filter(t => !q || threadTitle(t).toLowerCase().includes(q) || String(t.id||'').toLowerCase().includes(q));
   $('threadList').replaceChildren(...list.map(thread => {
     const div=document.createElement('div'); div.className='thread'+(state.currentThread?.id===thread.id?' active':'');
     const title=document.createElement('div'); title.className='thread-title'; title.textContent=threadTitle(thread);
     const meta=document.createElement('div'); meta.className='thread-meta'; meta.textContent=[thread.status?.type||thread.status,shortDate(thread.updatedAt||thread.createdAt)].filter(Boolean).join(' · ');
-    div.append(title,meta); div.onclick=()=>selectThread(thread.id); return div;
+    div.append(title,meta); div.onclick=()=>{ closeMobileSidebar(); selectThread(thread.id); }; return div;
   }));
   if (!list.length) { const p=document.createElement('div'); p.className='thread-meta'; p.style.padding='12px'; p.textContent=tr('noThreads'); $('threadList').replaceChildren(p); }
 }
@@ -89,13 +93,21 @@ function itemRole(item){
 }
 function collectItems(thread){
   const rows=[];
-  for(const turn of thread?.turns||[]){
-    for(const item of turn?.items||[]) rows.push({turn,item});
-  }
+  for(const turn of thread?.turns||[]) for(const item of turn?.items||[]) rows.push({turn,item});
   return rows;
+}
+function turnIsActive(turn){
+  const status=String(turn?.status?.type||turn?.status||'').toLowerCase();
+  return ['inprogress','in_progress','running','active','working'].includes(status.replace(/[ -]/g,''));
+}
+function inferActiveTurnId(thread){
+  const turns=Array.isArray(thread?.turns)?thread.turns:[];
+  for(let i=turns.length-1;i>=0;i--) if(turnIsActive(turns[i])) return turns[i].id || null;
+  return null;
 }
 function renderThread(thread){
   state.currentThread=thread;
+  state.activeTurnId=inferActiveTurnId(thread);
   $('threadTitle').textContent=threadTitle(thread);
   $('workspaceChip').textContent=thread.cwd || state.meta?.workspace || '—';
   $('emptyState').classList.add('hidden'); $('timeline').classList.remove('hidden');
@@ -116,8 +128,8 @@ function renderThread(thread){
   $('timeline').scrollTop=$('timeline').scrollHeight;
   renderThreads(); updateStatus();
 }
-async function selectThread(id){
-  $('statusLine').textContent=tr('loading');
+async function selectThread(id,{quiet=false}={}){
+  if(!quiet) $('statusLine').textContent=tr('loading');
   try { const result=await rpc('thread/read',{threadId:id,includeTurns:true}); renderThread(result.thread || result); }
   catch(error){ $('statusLine').textContent=error.message; }
 }
@@ -125,18 +137,36 @@ async function createThread(){
   const cwd = prompt(state.lang==='zh'?'工作目录（绝对路径）':'Working directory (absolute path)', state.currentThread?.cwd || state.meta?.workspace || '');
   if(!cwd) return null;
   try {
-    const result=await rpc('thread/start',{cwd});
+    const params={cwd};
+    const model=$('modelSelect').value; if(model) params.model=model;
+    const result=await rpc('thread/start',params);
     const thread=result.thread||result; await refreshThreads(); renderThread(thread); return thread;
   } catch(error){ alert(`${tr('threadCreateFailed')}: ${error.message}`); return null; }
+}
+function loadedIds(result){
+  const value=result?.data || result?.threadIds || result?.threads || result;
+  if(!Array.isArray(value)) return [];
+  return value.map(item => typeof item==='string'?item:item?.id).filter(Boolean);
+}
+async function ensureThreadLoaded(threadId){
+  if(hasRequest('thread/loaded/list')){
+    const current=await rpc('thread/loaded/list',{});
+    if(loadedIds(current).includes(threadId)) return;
+  }
+  if(hasRequest('thread/resume')) await rpc('thread/resume',{threadId});
 }
 async function sendPrompt(){
   const text=$('prompt').value.trim(); if(!text) return;
   let thread=state.currentThread || await createThread(); if(!thread) return;
   $('send').disabled=true;
   try {
-    const result=await rpc('turn/start',{threadId:thread.id,input:[{type:'text',text}]});
+    await ensureThreadLoaded(thread.id);
+    const params={threadId:thread.id,input:[{type:'text',text}]};
+    const model=$('modelSelect').value; const effort=$('effortSelect').value;
+    if(model) params.model=model; if(effort) params.effort=effort;
+    const result=await rpc('turn/start',params);
     state.activeTurnId=result?.turn?.id || result?.id || null; $('prompt').value=''; updateStatus();
-    setTimeout(()=>selectThread(thread.id),300);
+    setTimeout(()=>selectThread(thread.id,{quiet:true}),300);
   } catch(error){ alert(`${tr('sendFailed')}: ${error.message}`); }
   finally { $('send').disabled=false; }
 }
@@ -151,7 +181,11 @@ function appendLiveEvent(message){
   const threadId=message?.params?.threadId || message?.params?.thread?.id || message?.params?.turn?.threadId;
   if(threadId && threadId!==state.currentThread.id) return;
   if(message.method==='turn/started') { state.activeTurnId=message.params?.turn?.id || message.params?.turnId || state.activeTurnId; updateStatus(); }
-  if(message.method==='turn/completed') { state.activeTurnId=null; updateStatus(); setTimeout(()=>selectThread(state.currentThread.id),150); refreshThreads(); }
+  if(message.method==='turn/completed') { state.activeTurnId=null; updateStatus(); setTimeout(()=>selectThread(state.currentThread.id,{quiet:true}),150); refreshThreads(); }
+  if(message.method==='serverRequest/resolved') {
+    const id=message.params?.requestId ?? message.params?.id;
+    if(id!==undefined) { state.pendingRequests.delete(String(id)); renderApprovals(); }
+  }
   if(message.method==='item/agentMessage/delta' && typeof message.params?.delta==='string'){
     let live=$('timeline').querySelector('[data-live-agent="1"]');
     if(!live){ live=document.createElement('div'); live.className='message agent'; live.dataset.liveAgent='1'; const label=document.createElement('div'); label.className='label'; label.textContent=tr('agent'); const body=document.createElement('div'); body.className='body'; live.append(label,body); $('timeline').append(live); }
@@ -161,28 +195,38 @@ function appendLiveEvent(message){
     const card=document.createElement('details'); card.className='event-card'; const sum=document.createElement('summary'); sum.textContent=eventTitle(message); const pre=document.createElement('pre'); pre.textContent=JSON.stringify(message.params||{},null,2); card.append(sum,pre); $('timeline').append(card);
   }
 }
-
+async function resyncAuthoritativeState(){
+  $('statusLine').textContent=tr('resyncing');
+  await Promise.allSettled([refreshThreads(), state.currentThread?.id ? selectThread(state.currentThread.id,{quiet:true}) : Promise.resolve(), refreshMeta()]);
+}
 function connectEvents(){
   if(state.eventSource) state.eventSource.close();
   const es=new EventSource('/api/events',{withCredentials:true}); state.eventSource=es;
-  es.onmessage=(event)=>{
-    const envelope=JSON.parse(event.data);
+  es.onmessage=async(event)=>{
+    let envelope; try{envelope=JSON.parse(event.data);}catch{return;}
     if(envelope.type==='connected'){
+      state.pendingRequests.clear();
       for(const request of envelope.payload?.pendingServerRequests||[]) state.pendingRequests.set(String(request.id),request);
-      renderApprovals(); return;
+      renderApprovals();
+      if(state.eventConnectedOnce) await resyncAuthoritativeState();
+      state.eventConnectedOnce=true;
+      return;
     }
     const message=envelope.payload;
     if(envelope.type==='serverRequest') { state.pendingRequests.set(String(message.id),message); renderApprovals(); }
+    if(envelope.type==='serverRequestsCleared') { for(const id of message?.ids||[]) state.pendingRequests.delete(String(id)); renderApprovals(); }
     if(envelope.type==='notification') appendLiveEvent(message);
+    if(['eventOversize','codexReady'].includes(envelope.type)) await resyncAuthoritativeState();
+    if(envelope.type==='protocolMismatch') $('statusLine').textContent=tr('protocolMismatch');
   };
   es.onerror=()=>{ $('statusLine').textContent=tr('reconnect'); };
 }
 
 function approvalPreset(method){
-  if(method==='item/commandExecution/requestApproval' || method==='item/fileChange/requestApproval') return true;
-  return false;
+  return method==='item/commandExecution/requestApproval' || method==='item/fileChange/requestApproval';
 }
 function renderApprovals(){
+  if(!$('approvalTray')) return;
   const nodes=[];
   for(const request of state.pendingRequests.values()){
     const card=document.createElement('div'); card.className='approval-card';
@@ -206,11 +250,44 @@ async function answerRequest(request,result){
   catch(error){ alert(error.message); }
 }
 
+async function refreshMeta(){
+  try { state.meta=await api('/api/meta'); updateStatus(); } catch(error){ console.warn(error); }
+}
 function updateStatus(){
-  if(!state.meta) return;
+  if(!state.meta || !$('statusLine')) return;
   const bits=[state.meta.status==='ready'?tr('ready'):tr('degraded'), state.meta.schema?.codexVersion, state.meta.schema?.experimental?tr('experimental'):tr('stable')].filter(Boolean);
   $('statusLine').textContent=bits.join(' · ');
   $('interrupt').classList.toggle('hidden',!state.activeTurnId);
+}
+
+function normalizeModels(result){ return (result?.data || result?.models || []).filter(model => model && !model.hidden); }
+async function loadModels(){
+  if(!hasRequest('model/list')) return;
+  try { state.models=normalizeModels(await rpc('model/list',{})); renderModelControls(); } catch(error){ console.warn('model/list',error); }
+}
+function currentModel(){ return state.models.find(model => model.model === $('modelSelect')?.value) || null; }
+function renderEfforts(){
+  if(!$('effortSelect')) return;
+  const previous=$('effortSelect').value;
+  const model=currentModel();
+  const options=[new Option(tr('defaultValue'),'')];
+  for(const item of model?.supportedReasoningEfforts||[]){
+    const value=item.reasoningEffort || item.effort || item;
+    if(typeof value==='string') options.push(new Option(value,value));
+  }
+  $('effortSelect').replaceChildren(...options);
+  const fallback=model?.defaultReasoningEffort || '';
+  $('effortSelect').value=options.some(o=>o.value===previous)?previous:(options.some(o=>o.value===fallback)?fallback:'');
+}
+function renderModelControls(){
+  if(!$('modelSelect')) return;
+  const previous=$('modelSelect').value;
+  const options=[new Option(tr('defaultValue'),'')];
+  for(const model of state.models) options.push(new Option(model.displayName || model.model || model.id,model.model || model.id));
+  $('modelSelect').replaceChildren(...options);
+  const defaultModel=state.models.find(model=>model.isDefault)?.model || '';
+  $('modelSelect').value=options.some(o=>o.value===previous)?previous:(options.some(o=>o.value===defaultModel)?defaultModel:'');
+  renderEfforts();
 }
 
 function defaultFromSchema(schema, root){
@@ -235,14 +312,21 @@ function renderMethods(){
   $('methodList').replaceChildren(...items.map(item=>{ const div=document.createElement('div'); div.className='method-item'+(state.selectedMethod?.method===item.method?' active':''); div.textContent=item.method; div.onclick=()=>selectMethod(item); return div; }));
   if(!state.selectedMethod && items[0]) selectMethod(items[0]);
 }
-function selectMethod(item){
-  state.selectedMethod=item; $('methodName').textContent=item.method; $('methodDescription').textContent=item.description||''; $('methodSchema').textContent=JSON.stringify(item.paramsSchema,null,2);
-  $('methodParams').value=JSON.stringify(defaultFromSchema(item.paramsSchema,item.paramsSchema),null,2); $('methodResult').textContent=''; renderMethods();
+async function selectMethod(item){
+  state.selectedMethod=item; $('methodName').textContent=item.method; $('methodDescription').textContent=item.description||''; $('methodSchema').textContent=tr('loading'); $('methodResult').textContent=''; renderMethods();
+  const kind=$('methodKind').value;
+  try {
+    const response=await api(`/api/method-schema?kind=${encodeURIComponent(kind)}&method=${encodeURIComponent(item.method)}`);
+    if(state.selectedMethod!==item || $('methodKind').value!==kind) return;
+    item.schema=response.schema; $('methodSchema').textContent=JSON.stringify(response.schema,null,2);
+    $('methodParams').value=JSON.stringify(defaultFromSchema(response.schema,response.schema),null,2);
+  } catch(error){ $('methodSchema').textContent=error.message; $('methodParams').value='{}'; }
 }
 async function invokeSelected(){
   const item=state.selectedMethod; if(!item) return;
   let params; try{params=JSON.parse($('methodParams').value||'{}');}catch{alert(tr('invalidJson'));return;}
-  $('methodResult').textContent=tr('invoking');
+  if(item.managed){ $('methodResult').textContent=state.lang==='zh'?'该官方生命周期接口已由网关实现并自动管理。':'This official lifecycle method is implemented and automatically managed by the gateway.'; return; }
+  $('invokeMethod').disabled=true; $('methodResult').textContent=tr('invoking');
   try {
     let result;
     if($('methodKind').value==='requests') result=await rpc(item.method,params);
@@ -250,8 +334,10 @@ async function invokeSelected(){
     else throw new Error(state.lang==='zh'?'Server→Client 接口由 Codex 主动触发，不能从浏览器伪造调用。':'Server→Client methods are initiated by Codex and cannot be forged from the browser.');
     $('methodResult').textContent=JSON.stringify(result,null,2);
   } catch(error){ $('methodResult').textContent=JSON.stringify(error.body||{error:error.message},null,2); }
+  finally { $('invokeMethod').disabled=false; }
 }
 
+function closeMobileSidebar(){ $('sidebar').classList.remove('open'); }
 async function boot(){
   applyI18n();
   const session=await api('/api/session');
@@ -263,14 +349,16 @@ async function afterLogin(){
   [state.meta,state.methods]=await Promise.all([api('/api/meta'),api('/api/methods')]);
   $('workspaceChip').textContent=state.meta.workspace;
   const s=state.meta.schema; $('schemaSummary').textContent=`${s.codexVersion} · ${s.clientRequests} ${tr('interfaceCount')} · ${s.schemaDigest.slice(0,12)}`;
-  updateStatus(); connectEvents(); await refreshThreads(); renderMethods();
+  updateStatus(); connectEvents(); await Promise.all([refreshThreads(),loadModels()]); renderMethods();
 }
 
 $('loginForm').addEventListener('submit',async(e)=>{e.preventDefault();$('loginError').textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify({token:$('token').value})});$('token').value='';await afterLogin();}catch(error){$('loginError').textContent=error.message;}});
 $('newThread').onclick=createThread; $('refreshThreads').onclick=refreshThreads; $('reloadThread').onclick=()=>state.currentThread&&selectThread(state.currentThread.id); $('send').onclick=sendPrompt; $('interrupt').onclick=interrupt;
 $('prompt').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();sendPrompt();}});
-$('threadSearch').oninput=renderThreads; $('openProtocol').onclick=()=>$('protocolPanel').classList.remove('hidden'); $('closeProtocol').onclick=()=>$('protocolPanel').classList.add('hidden');
+$('threadSearch').oninput=renderThreads; $('openProtocol').onclick=()=>{$('protocolPanel').classList.remove('hidden');closeMobileSidebar();}; $('closeProtocol').onclick=()=>$('protocolPanel').classList.add('hidden');
 $('methodSearch').oninput=renderMethods; $('methodKind').onchange=()=>{state.selectedMethod=null;renderMethods();}; $('invokeMethod').onclick=invokeSelected;
+$('modelSelect').onchange=renderEfforts;
+$('menuToggle').onclick=()=>$('sidebar').classList.toggle('open');
 $('langToggle').onclick=()=>{state.lang=state.lang==='zh'?'en':'zh';localStorage.setItem('cweb_lang',state.lang);applyI18n();};
 $('logout').onclick=async()=>{try{await api('/api/logout',{method:'POST',body:'{}'});}finally{location.reload();}};
 boot().catch(error=>{console.error(error);$('statusLine').textContent=error.message;});

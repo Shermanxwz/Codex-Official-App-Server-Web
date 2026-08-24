@@ -9,7 +9,7 @@
 </head>
 <body>
   <div id="app" class="shell">
-    <aside class="sidebar">
+    <aside id="sidebar" class="sidebar">
       <div class="brand">
         <div class="brand-mark">C</div>
         <div><strong>Codex Web</strong><small data-i18n="officialClient">Official App Server Client</small></div>
@@ -31,9 +31,12 @@
 
     <main class="main">
       <header class="topbar">
-        <div>
-          <h1 id="threadTitle" data-i18n="welcome">Codex Web</h1>
-          <div id="statusLine" class="status-line">—</div>
+        <div class="top-title">
+          <button id="menuToggle" class="icon mobile-only" aria-label="Menu">☰</button>
+          <div>
+            <h1 id="threadTitle" data-i18n="welcome">Codex Web</h1>
+            <div id="statusLine" class="status-line">—</div>
+          </div>
         </div>
         <div class="top-actions">
           <button id="reloadThread" class="ghost" data-i18n="reload">刷新</button>
@@ -55,7 +58,8 @@
         <div class="composer-actions">
           <div class="composer-meta">
             <span id="workspaceChip" class="chip">—</span>
-            <span id="modelChip" class="chip">Codex</span>
+            <select id="modelSelect" class="compact-select" data-i18n-title="model"> <option value="">Codex</option></select>
+            <select id="effortSelect" class="compact-select" data-i18n-title="reasoning"><option value="">Default</option></select>
           </div>
           <button id="send" class="primary" data-i18n="send">发送</button>
         </div>

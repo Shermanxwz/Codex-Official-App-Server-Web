@@ -2,15 +2,21 @@
 Description=Codex App Server Web
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
 WorkingDirectory=__PROJECT_ROOT__
-ExecStart=/usr/bin/env node __PROJECT_ROOT__/src/server.mjs
+ExecStart="__NODE_BIN__" "__PROJECT_ROOT__/src/server.mjs"
+Environment=NODE_ENV=production
 Environment=CWEB_REQUIRE_AUTH=1
 EnvironmentFile=%h/.config/codex-app-server-web/env
 Restart=on-failure
+RestartPreventExitStatus=2 3
 RestartSec=3
+KillMode=control-group
+TimeoutStopSec=10
 UMask=0077
 
 [Install]
