@@ -63,14 +63,13 @@ export class CodexAppServer extends EventEmitter {
     const configuredExtensions = this.capabilities.extensions && typeof this.capabilities.extensions === 'object'
       ? this.capabilities.extensions
       : {};
+    const extensions = Object.fromEntries(
+      Object.entries({ 'openai/form': {}, ...configuredExtensions }).filter(([, value]) => value !== undefined),
+    );
     const capabilities = {
       ...(this.experimental ? { experimentalApi: true } : {}),
       ...this.capabilities,
-      extensions: {
-        'openai/form': {},
-        'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] },
-        ...configuredExtensions,
-      },
+      extensions,
     };
     if (!Array.isArray(capabilities.optOutNotificationMethods) || !capabilities.optOutNotificationMethods.length) {
       delete capabilities.optOutNotificationMethods;
