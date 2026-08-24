@@ -14,7 +14,7 @@ test('archive support registry covers every current first-class Codex item dispo
   assert.equal(THREAD_ITEM_TYPES.length, 18);
   assert.equal(new Set(THREAD_ITEM_TYPES).size, THREAD_ITEM_TYPES.length);
   const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
-  for (const type of THREAD_ITEM_TYPES) assert.match(app, new RegExp(`case ['\"]${type}['\"]`), `missing native renderer disposition for ${type}`);
+  for (const type of THREAD_ITEM_TYPES) assert.match(app, new RegExp(`case\\s*['\"]${type}['\"]`), `missing native renderer disposition for ${type}`);
 });
 
 test('all declared ServerRequest methods have one explicit trust/UI disposition', () => {
@@ -36,14 +36,17 @@ test('published support summary is conservative about MCP Apps hosting', () => {
 
 test('runtime server does not advertise MCP Apps UI without a complete host bridge', () => {
   const server = fs.readFileSync(path.join(root, 'src/server.mjs'), 'utf8');
-  assert.match(server, /'io\.modelcontextprotocol\/ui': undefined/);
-  assert.match(server, /mcpAppsAdvertised: false/);
-  assert.match(server, /extensions: \{ 'openai\/form': \{\} \}/);
+  assert.match(server, /'io\.modelcontextprotocol\/ui':\s*undefined/);
+  assert.match(server, /mcpAppsAdvertised:\s*false/);
+  assert.match(server, /extensions:\s*\{\s*'openai\/form':\s*\{\},?\s*\}/s);
+  assert.doesNotMatch(server, /'io\.modelcontextprotocol\/ui':\s*\{\s*mimeTypes/);
 });
 
 test('legacy and v2 approval decision vocabularies remain separate', () => {
   const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
-  for (const token of ["decision: 'approved'", "decision: 'approved_for_session'", "decision: 'accept'", "decision: 'acceptForSession'"]) assert.ok(app.includes(token), token);
-  assert.ok(app.includes("action: 'accept', content:"));
-  assert.ok(app.includes('_meta: null'));
+  for (const decision of ['approved', 'approved_for_session', 'accept', 'acceptForSession']) {
+    assert.match(app, new RegExp(`decision\\s*:\\s*['\"]${decision}['\"]`), decision);
+  }
+  assert.match(app, /action\s*:\s*['\"]accept['\"]\s*,\s*content\s*:/);
+  assert.match(app, /_meta\s*:\s*null/);
 });
