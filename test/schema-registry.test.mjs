@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { assertSameMethodSet, extractMethods, extractMethodsFromTypeScript, OfficialSchemaRegistry } from '../src/schema-registry.mjs';
+import { assertJsonWireCoveredByTypeScript, extractMethods, extractMethodsFromTypeScript, OfficialSchemaRegistry } from '../src/schema-registry.mjs';
 
 test('extractMethods derives every official method from oneOf variants', () => {
   const schema={
@@ -47,11 +47,12 @@ if(args[0]==='app-server'&&args[1]==='generate-ts'){
 
 
 
-test('TypeScript export method extraction and parity detect upstream drift', ()=>{
-  const methods=extractMethodsFromTypeScript('export type R = { "method": "thread/list" } | { "method": "turn/start" };');
-  assert.deepEqual(methods,['thread/list','turn/start']);
-  assert.doesNotThrow(()=>assertSameMethodSet([{method:'thread/list'},{method:'turn/start'}],methods,'ClientRequest'));
-  assert.throws(()=>assertSameMethodSet([{method:'thread/list'}],methods,'ClientRequest'),error=>error?.code==='OFFICIAL_PROTOCOL_EXPORT_DRIFT');
+test('TypeScript export must cover every JSON wire method while TS-only legacy exports are recorded', ()=>{
+  const methods=extractMethodsFromTypeScript('export type R = { "method": "thread/list" } | { "method": "turn/start" } | { "method": "legacy/get" };');
+  assert.deepEqual(methods,['thread/list','turn/start','legacy/get']);
+  const coverage=assertJsonWireCoveredByTypeScript([{method:'thread/list'},{method:'turn/start'}],methods,'ClientRequest');
+  assert.deepEqual(coverage,{jsonOnly:[],tsOnly:['legacy/get']});
+  assert.throws(()=>assertJsonWireCoveredByTypeScript([{method:'thread/list'},{method:'missing/json-wire'}],methods,'ClientRequest'),error=>error?.code==='OFFICIAL_PROTOCOL_EXPORT_DRIFT' && error.details.jsonOnly.includes('missing/json-wire'));
 });
 
 test('cached official schema is bound to exact Codex version and digest',t=>{
