@@ -24,13 +24,14 @@ export function sanitizedCodexEnv(source = process.env) {
 
 export class CodexAppServer extends EventEmitter {
   constructor({
-    codexBin = 'codex', cwd, experimental = false, timeoutMs = 600_000,
+    codexBin = 'codex', cwd, experimental = false, capabilities = {}, timeoutMs = 600_000,
     maxPending = 64, maxServerRequests = maxPending, maxStdinBufferBytes = 4 * 1024 * 1024, maxLineBytes = 32 * 1024 * 1024,
   }) {
     super();
     this.codexBin = codexBin;
     this.cwd = cwd;
     this.experimental = experimental;
+    this.capabilities = capabilities && typeof capabilities === 'object' ? capabilities : {};
     this.timeoutMs = timeoutMs;
     this.maxPending = maxPending;
     this.maxServerRequests = maxServerRequests;
@@ -58,6 +59,26 @@ export class CodexAppServer extends EventEmitter {
     return promise;
   }
 
+  #initializeCapabilities() {
+    const configuredExtensions = this.capabilities.extensions && typeof this.capabilities.extensions === 'object'
+      ? this.capabilities.extensions
+      : {};
+    const capabilities = {
+      ...(this.experimental ? { experimentalApi: true } : {}),
+      ...this.capabilities,
+      extensions: {
+        'openai/form': {},
+        'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] },
+        ...configuredExtensions,
+      },
+    };
+    if (!Array.isArray(capabilities.optOutNotificationMethods) || !capabilities.optOutNotificationMethods.length) {
+      delete capabilities.optOutNotificationMethods;
+    }
+    if (!capabilities.requestAttestation) delete capabilities.requestAttestation;
+    return capabilities;
+  }
+
   async #startProcess() {
     const generation = ++this.generation;
     const child = spawn(this.codexBin, ['app-server', '--listen', 'stdio://'], {
@@ -82,15 +103,9 @@ export class CodexAppServer extends EventEmitter {
         clientInfo: {
           name: 'codex_app_server_web',
           title: 'Codex App Server Web',
-          version: '0.2.1',
+          version: '0.3.0',
         },
-        capabilities: {
-          ...(this.experimental ? { experimentalApi: true } : {}),
-          extensions: {
-            'openai/form': {},
-            'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] },
-          },
-        },
+        capabilities: this.#initializeCapabilities(),
       }, 30_000);
       if (this.child !== child || generation !== this.generation) throw new Error('Codex App Server changed during initialization');
       this.#send({ method: 'initialized', params: {} });
