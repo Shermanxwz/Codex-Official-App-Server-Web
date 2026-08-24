@@ -12,7 +12,7 @@ env:
 
 jobs:
   archive-parity-one-shot:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feat/native-codex-web-parity'
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/native-codex-web-parity'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
