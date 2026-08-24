@@ -9,6 +9,7 @@ import {
   SessionStore, SlidingRateLimit, isLoopbackHost, json, parseCookies,
   readJson, safeEqualText, sameOrigin, secureHeaders,
 } from './security.mjs';
+import { PLATFORM_ONLY_SERVER_REQUESTS, protocolSupportSummary } from '../public/protocol-support.js';
 
 const APP_VERSION = '0.3.0';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -47,6 +48,8 @@ try {
 }
 
 const clientCapabilities = {
+  // Mask the legacy MCP Apps default until this Web client has the complete sandbox/host bridge.
+  extensions: { 'io.modelcontextprotocol/ui': undefined },
   ...(config.notificationOptOut.length ? { optOutNotificationMethods: config.notificationOptOut } : {}),
 };
 
@@ -70,10 +73,7 @@ let restartTimer = null;
 let restartAttempt = 0;
 let eventSequence = 0;
 
-const MACHINE_ONLY_SERVER_REQUESTS = new Set([
-  'attestation/generate',
-  'account/chatgptAuthTokens/refresh',
-]);
+const MACHINE_ONLY_SERVER_REQUESTS = new Set(PLATFORM_ONLY_SERVER_REQUESTS);
 
 const CODING_PROFILE_DENY = [
   /^account\/(login|logout|chatgptAuthTokens)/,
@@ -312,14 +312,15 @@ async function api(req, res, url) {
       access: {
         profile: config.accessProfile,
       },
+      protocolSupport: protocolSupportSummary(),
       capabilities: {
         experimentalApi: config.experimental,
         extensions: {
           'openai/form': {},
-          'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] },
         },
         optOutNotificationMethods: config.notificationOptOut,
         requestAttestation: false,
+        mcpAppsHost: false,
         platformOnlyServerRequests: [...MACHINE_ONLY_SERVER_REQUESTS],
       },
       contract: {
@@ -331,6 +332,9 @@ async function api(req, res, url) {
         codexEnvironmentSecretsStripped: true,
         accessPolicyGate: true,
         nativeItemTimeline: true,
+        exactProtocolDispositionSeal: true,
+        openaiFormNative: true,
+        mcpAppsAdvertised: false,
       },
     });
   }
