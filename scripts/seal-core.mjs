@@ -26,7 +26,7 @@ try{
   if(!registry.serverRequests.length) throw new Error('Official stable ServerRequest method set is unexpectedly empty');
   const manifest={
     sealedAt:new Date().toISOString(), node:process.version, codexVersion:registry.version,
-    schemaDigest:registry.digest, protocolExportParity:true,
+    schemaDigest:registry.digest, jsonWireCoveredByTypeScript:true, typeScriptOnlyExports:registry.summary().typeScriptOnlyExports,
     stableClientRequests:registry.requests.length,
     stableClientNotifications:registry.notifications.length, stableServerRequests:registry.serverRequests.length,
     stableServerNotifications:registry.serverNotifications.length, requiredCoreMethods:requiredRequests,
