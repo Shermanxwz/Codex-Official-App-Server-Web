@@ -94,9 +94,11 @@ npm run dev
 
 The installer resolves and records the exact current `node` and `codex` executables and writes only project-owned files:
 
-- `~/.config/codex-app-server-web/env`
+- `$XDG_CONFIG_HOME/codex-app-server-web/env` (default `~/.config/codex-app-server-web/env`)
 - `~/.config/systemd/user/codex-app-server-web.service`
-- `~/.local/state/codex-app-server-web/`
+- `$XDG_STATE_HOME/codex-app-server-web/` (default `~/.local/state/codex-app-server-web/`)
+
+The systemd user unit always stays in the standard `~/.config/systemd/user/` search path, while its `EnvironmentFile` points at the selected XDG config directory. The generated access token is stored mode `0600` and is not printed by the installer.
 
 The service uses `UMask=0077`, `KillMode=control-group`, bounded shutdown, auth-on defaults, and does not restart-loop on fatal configuration/schema errors. It does **not** modify Codex installation/configuration or another Codex service.
 

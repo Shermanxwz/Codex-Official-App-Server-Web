@@ -34,6 +34,7 @@ Therefore:
 - The gateway never scans for or kills unrelated Codex processes.
 - Project-owned state stays outside `CODEX_HOME`.
 - Official config/filesystem/account mutation methods may mutate Codex state **through Codex itself**. This is not a direct gateway write.
+- `ARCHIVE_READY` does not promise byte-for-byte immutability of official Codex's own authentication or session files; official Codex and other clients may refresh/journal their own state. The gateway's guarantee is no direct ownership or write path to those files.
 
 ## Availability contract
 

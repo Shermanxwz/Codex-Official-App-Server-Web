@@ -82,6 +82,12 @@ const service=fs.readFileSync(path.join(root,'deploy/codex-app-server-web.servic
 for(const needle of ['Environment=CWEB_REQUIRE_AUTH=1','UMask=0077','KillMode=control-group','TimeoutStopSec=10','RestartPreventExitStatus=2 3']) {
   if(!service.includes(needle)) failures.push(`systemd hardening missing: ${needle}`);
 }
+const installer=fs.readFileSync(path.join(root,'scripts/install-linux.sh'),'utf8');
+for(const needle of ['SERVICE_DIR="$HOME/.config/systemd/user"','CWEB_STATE_DIR=','CWEB_CONFIG_DIR=','systemctl --user is-active']) {
+  if(!installer.includes(needle)) failures.push(`installer hardening missing: ${needle}`);
+}
+if(!service.includes('EnvironmentFile=__ENV_FILE__')) failures.push('systemd unit must use the installer-resolved project EnvironmentFile');
+if(/echo[^\n]*\$TOKEN/.test(installer)) failures.push('installer must not print the access token');
 
 const app=fs.readFileSync(path.join(root,'public/app.js'),'utf8');
 for(const needle of ["thread/loaded/list","thread/resume","model/list","supportedReasoningEfforts","resyncAuthoritativeState","serverRequestsCleared"]) {

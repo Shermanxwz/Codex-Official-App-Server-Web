@@ -79,9 +79,11 @@ npm start
 
 安装器只写项目自己的：
 
-- `~/.config/codex-app-server-web/env`
+- `$XDG_CONFIG_HOME/codex-app-server-web/env`（默认 `~/.config/codex-app-server-web/env`）
 - `~/.config/systemd/user/codex-app-server-web.service`
-- `~/.local/state/codex-app-server-web/`
+- `$XDG_STATE_HOME/codex-app-server-web/`（默认 `~/.local/state/codex-app-server-web/`）
+
+systemd user unit 始终放在标准 `~/.config/systemd/user/` 搜索路径，unit 内的 `EnvironmentFile` 会指向实际选择的 XDG config 目录。访问 token 以 `0600` 保存，安装器不会把 token 打印到终端。
 
 默认 `127.0.0.1`、认证开启、`UMask=0077`、`KillMode=control-group`。远程访问建议放在 Tailscale、可信 HTTPS 反代或 SSH tunnel 后面，不要直接暴露原始 HTTP 端口。
 

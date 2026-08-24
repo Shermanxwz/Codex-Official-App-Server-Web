@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { CodexAppServer } from '../src/codex-client.mjs';
 import { OfficialSchemaRegistry } from '../src/schema-registry.mjs';
 
-const APP_VERSION='0.2.0';
+const APP_VERSION='0.2.1';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const core=spawnSync(process.execPath,['scripts/seal-core.mjs'],{cwd:root,encoding:'utf8',stdio:'inherit',env:process.env});
 if(core.error) throw core.error;

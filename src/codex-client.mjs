@@ -82,7 +82,7 @@ export class CodexAppServer extends EventEmitter {
         clientInfo: {
           name: 'codex_app_server_web',
           title: 'Codex App Server Web',
-          version: '0.2.0',
+          version: '0.2.1',
         },
         capabilities: {
           ...(this.experimental ? { experimentalApi: true } : {}),

@@ -82,6 +82,8 @@ This proves process-lifecycle isolation. It does **not** claim that two independ
 - regenerate/verify source manifest after intentional source changes
 - rerun `npm run seal` after an official Codex upgrade
 
+`ARCHIVE_READY` proves the gateway's source contract, official protocol exports, and real target-host RPC calls. It does not claim byte-for-byte immutability of official Codex's own `~/.codex` authentication/session state: the official runtime or another concurrently running Codex client may refresh or journal its own state. The gateway itself never owns or directly writes those files.
+
 ## 6. CI baseline
 
 Required CI validates a fixed, known-good official Codex release for reproducibility. A separate `continue-on-error` latest-version job detects future protocol drift early without invalidating an already sealed baseline merely because upstream published a new release.

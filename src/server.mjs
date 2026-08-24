@@ -10,7 +10,7 @@ import {
   readJson, safeEqualText, sameOrigin, secureHeaders,
 } from './security.mjs';
 
-const APP_VERSION = '0.2.0';
+const APP_VERSION = '0.2.1';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = path.join(root, 'public');
 const schemaDir = path.join(config.stateDir, config.experimental ? 'schema-experimental' : 'schema-stable');

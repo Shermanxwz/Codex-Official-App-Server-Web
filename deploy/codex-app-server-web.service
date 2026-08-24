@@ -10,8 +10,8 @@ Type=simple
 WorkingDirectory=__PROJECT_ROOT__
 ExecStart="__NODE_BIN__" "__PROJECT_ROOT__/src/server.mjs"
 Environment=NODE_ENV=production
+EnvironmentFile=__ENV_FILE__
 Environment=CWEB_REQUIRE_AUTH=1
-EnvironmentFile=%h/.config/codex-app-server-web/env
 Restart=on-failure
 RestartPreventExitStatus=2 3
 RestartSec=3
