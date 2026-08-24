@@ -1,0 +1,17 @@
+[Unit]
+Description=Codex App Server Web
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__PROJECT_ROOT__
+ExecStart=/usr/bin/env node __PROJECT_ROOT__/src/server.mjs
+Environment=CWEB_REQUIRE_AUTH=1
+EnvironmentFile=%h/.config/codex-app-server-web/env
+Restart=on-failure
+RestartSec=3
+UMask=0077
+
+[Install]
+WantedBy=default.target

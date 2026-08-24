@@ -1,0 +1,18 @@
+{
+  "name": "codex-app-server-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "dev": "CWEB_REQUIRE_AUTH=0 node --watch src/server.mjs",
+    "test": "node --test test/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "seal": "node scripts/seal.mjs",
+    "seal:core": "node scripts/seal-core.mjs"
+  },
+  "license": "MIT"
+}

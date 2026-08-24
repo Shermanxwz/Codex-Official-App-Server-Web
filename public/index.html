@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Codex App Server Web</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div id="app" class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">C</div>
+        <div><strong>Codex Web</strong><small data-i18n="officialClient">Official App Server Client</small></div>
+      </div>
+      <button id="newThread" class="primary full" data-i18n="newThread">新建会话</button>
+      <div class="sidebar-row">
+        <input id="threadSearch" data-i18n-placeholder="searchThreads" placeholder="搜索会话">
+        <button id="refreshThreads" class="icon" title="Refresh">↻</button>
+      </div>
+      <div id="threadList" class="thread-list"></div>
+      <div class="sidebar-footer">
+        <button id="openProtocol" class="ghost full" data-i18n="protocol">官方接口</button>
+        <div class="row split">
+          <button id="langToggle" class="ghost">中 / EN</button>
+          <button id="logout" class="ghost" data-i18n="logout">退出</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1 id="threadTitle" data-i18n="welcome">Codex Web</h1>
+          <div id="statusLine" class="status-line">—</div>
+        </div>
+        <div class="top-actions">
+          <button id="reloadThread" class="ghost" data-i18n="reload">刷新</button>
+          <button id="interrupt" class="danger hidden" data-i18n="stop">停止</button>
+        </div>
+      </header>
+
+      <section id="emptyState" class="empty-state">
+        <div class="orb">C</div>
+        <h2 data-i18n="emptyTitle">官方 Codex，浏览器里使用</h2>
+        <p data-i18n="emptyBody">通过官方 codex app-server 协议连接，不解析终端，不使用私有接口。</p>
+      </section>
+
+      <section id="timeline" class="timeline hidden"></section>
+      <section id="approvalTray" class="approval-tray"></section>
+
+      <footer class="composer">
+        <textarea id="prompt" rows="3" data-i18n-placeholder="prompt" placeholder="给 Codex 发送消息…"></textarea>
+        <div class="composer-actions">
+          <div class="composer-meta">
+            <span id="workspaceChip" class="chip">—</span>
+            <span id="modelChip" class="chip">Codex</span>
+          </div>
+          <button id="send" class="primary" data-i18n="send">发送</button>
+        </div>
+      </footer>
+    </main>
+
+    <aside id="protocolPanel" class="drawer hidden">
+      <div class="drawer-head">
+        <div><h2 data-i18n="protocol">官方接口</h2><small id="schemaSummary"></small></div>
+        <button id="closeProtocol" class="icon">×</button>
+      </div>
+      <div class="protocol-toolbar">
+        <input id="methodSearch" data-i18n-placeholder="searchMethods" placeholder="搜索 method">
+        <select id="methodKind">
+          <option value="requests">Client Requests</option>
+          <option value="notifications">Client Notifications</option>
+          <option value="serverRequests">Server Requests</option>
+          <option value="serverNotifications">Server Notifications</option>
+        </select>
+      </div>
+      <div class="protocol-grid">
+        <div id="methodList" class="method-list"></div>
+        <div class="method-detail">
+          <h3 id="methodName">—</h3>
+          <p id="methodDescription" class="muted"></p>
+          <details open><summary data-i18n="schema">参数 Schema</summary><pre id="methodSchema"></pre></details>
+          <label data-i18n="params">参数 JSON</label>
+          <textarea id="methodParams" rows="12">{}</textarea>
+          <button id="invokeMethod" class="primary" data-i18n="invoke">调用</button>
+          <pre id="methodResult" class="result"></pre>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div id="loginModal" class="modal hidden">
+    <form id="loginForm" class="modal-card">
+      <div class="brand large"><div class="brand-mark">C</div><div><strong>Codex Web</strong><small data-i18n="loginSub">安全登录</small></div></div>
+      <label for="token" data-i18n="accessToken">访问令牌</label>
+      <input id="token" type="password" autocomplete="current-password" required>
+      <button class="primary full" data-i18n="login">登录</button>
+      <p id="loginError" class="error"></p>
+    </form>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
