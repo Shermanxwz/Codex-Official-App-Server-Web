@@ -4,75 +4,137 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
-  <title>Codex App Server Web</title>
+  <meta name="theme-color" content="#f7f7f5">
+  <title>Codex Web</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <div id="app" class="shell">
+    <div id="sidebarScrim" class="sidebar-scrim hidden"></div>
+
     <aside id="sidebar" class="sidebar">
-      <div class="brand">
-        <div class="brand-mark">C</div>
-        <div><strong>Codex Web</strong><small data-i18n="officialClient">Official App Server Client</small></div>
+      <div class="brand-row">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img"><path d="M12 2.5 20.2 7v10L12 21.5 3.8 17V7L12 2.5Zm0 2.3L6 8.1v7.8l6 3.3 6-3.3V8.1l-6-3.3Zm0 3.1 3.8 2.1v4L12 16.1 8.2 14v-4L12 7.9Z"/></svg>
+          </div>
+          <div class="brand-copy">
+            <strong>Codex</strong>
+            <small data-i18n="officialClient">Official App Server Web</small>
+          </div>
+        </div>
+        <button id="collapseSidebar" class="icon-button desktop-only" type="button" title="Collapse sidebar" aria-label="Collapse sidebar">‹</button>
       </div>
-      <button id="newThread" class="primary full" data-i18n="newThread">新建会话</button>
-      <div class="sidebar-row">
-        <input id="threadSearch" data-i18n-placeholder="searchThreads" placeholder="搜索会话">
-        <button id="refreshThreads" class="icon" title="Refresh">↻</button>
+
+      <button id="newThread" class="new-chat" type="button">
+        <span class="button-icon">＋</span>
+        <span data-i18n="newThread">新建会话</span>
+        <kbd>⌘ K</kbd>
+      </button>
+
+      <label class="search-box">
+        <span aria-hidden="true">⌕</span>
+        <input id="threadSearch" data-i18n-placeholder="searchThreads" placeholder="搜索会话" autocomplete="off">
+      </label>
+
+      <div class="section-label">
+        <span data-i18n="recents">最近</span>
+        <button id="refreshThreads" class="tiny-button" type="button" data-i18n-title="reload" title="刷新">↻</button>
       </div>
-      <div id="threadList" class="thread-list"></div>
+      <div id="threadList" class="thread-list" role="list"></div>
+
       <div class="sidebar-footer">
-        <button id="openProtocol" class="ghost full" data-i18n="protocol">官方接口</button>
-        <div class="row split">
-          <button id="langToggle" class="ghost">中 / EN</button>
-          <button id="logout" class="ghost" data-i18n="logout">退出</button>
+        <button id="openProtocol" class="nav-button" type="button">
+          <span>⌘</span><span data-i18n="protocol">官方接口</span>
+        </button>
+        <div class="sidebar-footer-row">
+          <button id="langToggle" class="nav-button compact" type="button">中 / EN</button>
+          <button id="logout" class="nav-button compact" type="button" data-i18n="logout">退出</button>
         </div>
       </div>
     </aside>
 
     <main class="main">
       <header class="topbar">
-        <div class="top-title">
-          <button id="menuToggle" class="icon mobile-only" aria-label="Menu">☰</button>
-          <div>
-            <h1 id="threadTitle" data-i18n="welcome">Codex Web</h1>
-            <div id="statusLine" class="status-line">—</div>
+        <div class="topbar-left">
+          <button id="menuToggle" class="icon-button mobile-only" type="button" aria-label="Open sidebar">☰</button>
+          <button id="expandSidebar" class="icon-button sidebar-collapsed-only" type="button" aria-label="Open sidebar">›</button>
+          <div class="thread-heading">
+            <div class="thread-heading-line">
+              <h1 id="threadTitle" data-i18n="welcome">Codex</h1>
+              <span id="workingDot" class="working-dot hidden" aria-label="Working"></span>
+            </div>
+            <div class="thread-subline">
+              <span id="connectionDot" class="connection-dot"></span>
+              <span id="statusLine">—</span>
+              <span class="sep">·</span>
+              <span id="workspaceHeader" class="workspace-header">—</span>
+            </div>
           </div>
         </div>
         <div class="top-actions">
-          <button id="reloadThread" class="ghost" data-i18n="reload">刷新</button>
-          <button id="interrupt" class="danger hidden" data-i18n="stop">停止</button>
+          <button id="reloadThread" class="icon-button" type="button" data-i18n-title="reload" title="刷新">↻</button>
+          <button id="interrupt" class="stop-button hidden" type="button" data-i18n="stop">停止</button>
+          <button id="openProtocolTop" class="icon-button" type="button" title="Official APIs">•••</button>
         </div>
       </header>
 
+      <div id="connectionBanner" class="connection-banner hidden" role="status"></div>
+
       <section id="emptyState" class="empty-state">
-        <div class="orb">C</div>
-        <h2 data-i18n="emptyTitle">官方 Codex，浏览器里使用</h2>
-        <p data-i18n="emptyBody">通过官方 codex app-server 协议连接，不解析终端，不使用私有接口。</p>
+        <div class="empty-inner">
+          <div class="empty-logo">
+            <svg viewBox="0 0 24 24"><path d="M12 2.5 20.2 7v10L12 21.5 3.8 17V7L12 2.5Zm0 2.3L6 8.1v7.8l6 3.3 6-3.3V8.1l-6-3.3Zm0 3.1 3.8 2.1v4L12 16.1 8.2 14v-4L12 7.9Z"/></svg>
+          </div>
+          <h2 data-i18n="emptyTitle">你想构建什么？</h2>
+          <p data-i18n="emptyBody">连接官方 Codex App Server，在浏览器里保留原生 Thread、Turn、Item 与审批流程。</p>
+          <button id="emptyNewThread" class="primary-button" type="button" data-i18n="startCoding">开始编码</button>
+        </div>
       </section>
 
-      <section id="timeline" class="timeline hidden"></section>
-      <section id="approvalTray" class="approval-tray"></section>
+      <section id="timeline" class="timeline hidden" aria-live="polite"></section>
 
-      <footer class="composer">
-        <textarea id="prompt" rows="3" data-i18n-placeholder="prompt" placeholder="给 Codex 发送消息…"></textarea>
-        <div class="composer-actions">
-          <div class="composer-meta">
-            <span id="workspaceChip" class="chip">—</span>
-            <select id="modelSelect" class="compact-select" data-i18n-title="model"> <option value="">Codex</option></select>
-            <select id="effortSelect" class="compact-select" data-i18n-title="reasoning"><option value="">Default</option></select>
+      <button id="jumpBottom" class="jump-bottom hidden" type="button" data-i18n="jumpBottom">回到底部 ↓</button>
+
+      <section id="approvalTray" class="approval-tray" aria-live="assertive"></section>
+
+      <footer class="composer-wrap">
+        <div id="composerCard" class="composer-card">
+          <textarea id="prompt" rows="1" data-i18n-placeholder="prompt" placeholder="给 Codex 发送消息…" spellcheck="true"></textarea>
+          <div class="composer-toolbar">
+            <div class="composer-left">
+              <button id="workspaceButton" class="pill-button" type="button" title="Workspace">
+                <span>⌂</span><span id="workspaceChip">—</span>
+              </button>
+              <select id="modelSelect" class="pill-select" data-i18n-title="model" title="模型">
+                <option value="">Codex</option>
+              </select>
+              <select id="effortSelect" class="pill-select" data-i18n-title="reasoning" title="推理强度">
+                <option value="">Default</option>
+              </select>
+            </div>
+            <div class="composer-right">
+              <span id="composerHint" class="composer-hint" data-i18n="sendHint">Enter 发送 · Shift+Enter 换行</span>
+              <button id="send" class="send-button" type="button" aria-label="Send">↑</button>
+            </div>
           </div>
-          <button id="send" class="primary" data-i18n="send">发送</button>
         </div>
       </footer>
     </main>
 
-    <aside id="protocolPanel" class="drawer hidden">
+    <aside id="protocolPanel" class="drawer hidden" aria-label="Official APIs">
       <div class="drawer-head">
-        <div><h2 data-i18n="protocol">官方接口</h2><small id="schemaSummary"></small></div>
-        <button id="closeProtocol" class="icon">×</button>
+        <div>
+          <h2 data-i18n="protocol">官方接口</h2>
+          <small id="schemaSummary"></small>
+        </div>
+        <button id="closeProtocol" class="icon-button" type="button">×</button>
       </div>
       <div class="protocol-toolbar">
-        <input id="methodSearch" data-i18n-placeholder="searchMethods" placeholder="搜索 method">
+        <label class="search-box">
+          <span>⌕</span>
+          <input id="methodSearch" data-i18n-placeholder="searchMethods" placeholder="搜索 method" autocomplete="off">
+        </label>
         <select id="methodKind">
           <option value="requests">Client Requests</option>
           <option value="notifications">Client Notifications</option>
@@ -83,12 +145,20 @@
       <div class="protocol-grid">
         <div id="methodList" class="method-list"></div>
         <div class="method-detail">
-          <h3 id="methodName">—</h3>
+          <div class="method-title-row">
+            <h3 id="methodName">—</h3>
+            <span id="methodRisk" class="risk-badge"></span>
+          </div>
           <p id="methodDescription" class="muted"></p>
-          <details open><summary data-i18n="schema">参数 Schema</summary><pre id="methodSchema"></pre></details>
-          <label data-i18n="params">参数 JSON</label>
+          <details>
+            <summary data-i18n="schema">参数 Schema</summary>
+            <pre id="methodSchema"></pre>
+          </details>
+          <label for="methodParams" data-i18n="params">参数 JSON</label>
           <textarea id="methodParams" rows="12">{}</textarea>
-          <button id="invokeMethod" class="primary" data-i18n="invoke">调用</button>
+          <div class="method-actions">
+            <button id="invokeMethod" class="primary-button" type="button" data-i18n="invoke">调用</button>
+          </div>
           <pre id="methodResult" class="result"></pre>
         </div>
       </div>
@@ -96,14 +166,39 @@
   </div>
 
   <div id="loginModal" class="modal hidden">
-    <form id="loginForm" class="modal-card">
-      <div class="brand large"><div class="brand-mark">C</div><div><strong>Codex Web</strong><small data-i18n="loginSub">安全登录</small></div></div>
+    <form id="loginForm" class="modal-card login-card">
+      <div class="login-logo brand-mark">
+        <svg viewBox="0 0 24 24"><path d="M12 2.5 20.2 7v10L12 21.5 3.8 17V7L12 2.5Zm0 2.3L6 8.1v7.8l6 3.3 6-3.3V8.1l-6-3.3Z"/></svg>
+      </div>
+      <h2>Codex Web</h2>
+      <p class="muted" data-i18n="loginSub">连接这台机器上的官方 Codex App Server</p>
       <label for="token" data-i18n="accessToken">访问令牌</label>
       <input id="token" type="password" autocomplete="current-password" required>
-      <button class="primary full" data-i18n="login">登录</button>
+      <button class="primary-button full" type="submit" data-i18n="login">登录</button>
       <p id="loginError" class="error"></p>
     </form>
   </div>
+
+  <div id="newThreadModal" class="modal hidden">
+    <form id="newThreadForm" class="modal-card">
+      <div class="modal-head">
+        <div>
+          <h2 data-i18n="newThread">新建会话</h2>
+          <p class="muted" data-i18n="workspaceHelp">选择 Codex 工作目录。必须是 App Server 主机上的绝对路径。</p>
+        </div>
+        <button id="closeNewThread" class="icon-button" type="button">×</button>
+      </div>
+      <label for="newThreadCwd" data-i18n="workspace">工作目录</label>
+      <input id="newThreadCwd" type="text" autocomplete="off" placeholder="/home/user/project" required>
+      <div class="modal-actions">
+        <button id="cancelNewThread" class="secondary-button" type="button" data-i18n="cancelSimple">取消</button>
+        <button class="primary-button" type="submit" data-i18n="create">创建</button>
+      </div>
+      <p id="newThreadError" class="error"></p>
+    </form>
+  </div>
+
+  <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
   <script type="module" src="/app.js"></script>
 </body>

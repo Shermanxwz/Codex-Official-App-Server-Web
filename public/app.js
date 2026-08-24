@@ -1,364 +1,104 @@
-const $ = (id) => document.getElementById(id);
-const state = {
-  lang: localStorage.getItem('cweb_lang') || (navigator.language.startsWith('zh') ? 'zh' : 'en'),
-  meta: null, methods: null, currentThread: null, activeTurnId: null, eventSource: null,
-  threads: [], selectedMethod: null, pendingRequests: new Map(), models: [], eventConnectedOnce: false,
-};
+import { THREAD_ITEM_TYPES, TIMELINE_DELTA_NOTIFICATIONS, protocolSupportSummary, serverRequestSupport } from './protocol-support.js';
+const nativeStyles=document.createElement('link');nativeStyles.rel='stylesheet';nativeStyles.href='/native.css';document.head.append(nativeStyles);
+const $=id=>document.getElementById(id);
+const state={lang:localStorage.getItem('cweb_lang')||(navigator.language.startsWith('zh')?'zh':'en'),meta:null,methods:null,threads:[],currentThread:null,activeTurnId:null,models:[],eventSource:null,eventConnectedOnce:false,pendingRequests:new Map(),selectedMethod:null,liveItems:new Map(),pendingDeltas:new Map(),streamText:new Map(),tokenUsage:null,newThreadResolver:null};
+const T={zh:{officialClient:'Official App Server Web',newThread:'新建会话',searchThreads:'搜索会话',recents:'最近',protocol:'官方接口',logout:'退出',reload:'刷新',stop:'停止',welcome:'Codex',emptyTitle:'你想构建什么？',emptyBody:'连接官方 Codex App Server，在浏览器里保留原生 Thread、Turn、Item 与审批流程。',startCoding:'开始编码',prompt:'给 Codex 发送消息…',sendHint:'Enter 发送 · Shift+Enter 换行',jumpBottom:'回到底部 ↓',searchMethods:'搜索 method',schema:'参数 Schema',params:'参数 JSON',invoke:'调用',loginSub:'连接这台机器上的官方 Codex App Server',accessToken:'访问令牌',login:'登录',workspaceHelp:'选择 Codex 工作目录。必须是 App Server 主机上的绝对路径。',workspace:'工作目录',cancelSimple:'取消',create:'创建',user:'你',agent:'Codex',ready:'就绪',degraded:'连接异常',stable:'Stable',experimental:'Experimental',noThreads:'暂无会话',model:'模型',reasoning:'推理强度',defaultValue:'默认',working:'正在工作',reconnect:'事件连接中断，正在重新连接…',resyncing:'正在重新同步…',protocolMismatch:'上游协议发生变化，未知事件已被拒绝',threadCreateFailed:'新建会话失败',sendFailed:'发送失败',command:'命令',files:'文件修改',plan:'计划',thinking:'推理',tool:'工具',allow:'允许',allowSession:'本会话允许',decline:'拒绝',cancel:'拒绝并停止',submit:'提交',answerQuestions:'Codex 需要你的输入',mcpRequest:'MCP 请求',blocked:'被访问策略阻止',rawResponse:'原始响应',copy:'复制',hookPrompt:'Hook 提示',collaboration:'多代理协作',subAgent:'子代理活动',webSearch:'网页搜索',imageView:'查看图片',imageGeneration:'图片生成',sleeping:'等待',reviewMode:'审查模式',compacted:'上下文已压缩',permissions:'权限请求',dynamicTool:'动态工具回调',allowTurn:'本轮允许',denyPermission:'不授予',strictReview:'后续命令严格复核',supportNative:'原生',supportManual:'需手动工具宿主',supportPlatform:'平台专属',allowAlways:'按建议长期允许'},en:{officialClient:'Official App Server Web',newThread:'New thread',searchThreads:'Search threads',recents:'Recents',protocol:'Official APIs',logout:'Log out',reload:'Reload',stop:'Stop',welcome:'Codex',emptyTitle:'What do you want to build?',emptyBody:'Connected to the official Codex App Server with native Thread, Turn, Item, and approval flows.',startCoding:'Start coding',prompt:'Message Codex…',sendHint:'Enter to send · Shift+Enter newline',jumpBottom:'Jump to bottom ↓',searchMethods:'Search methods',schema:'Parameter schema',params:'Parameters JSON',invoke:'Invoke',loginSub:'Connect to the official Codex App Server on this machine',accessToken:'Access token',login:'Sign in',workspaceHelp:'Choose the Codex working directory. It must be an absolute path on the App Server host.',workspace:'Workspace',cancelSimple:'Cancel',create:'Create',user:'You',agent:'Codex',ready:'Ready',degraded:'Connection degraded',stable:'Stable',experimental:'Experimental',noThreads:'No threads yet',model:'Model',reasoning:'Reasoning',defaultValue:'Default',working:'Working',reconnect:'Event stream disconnected; reconnecting…',resyncing:'Resynchronizing…',protocolMismatch:'Upstream protocol changed; unknown event rejected',threadCreateFailed:'Failed to create thread',sendFailed:'Failed to send',command:'Command',files:'File changes',plan:'Plan',thinking:'Reasoning',tool:'Tool',allow:'Allow',allowSession:'Allow for session',decline:'Decline',cancel:'Decline & stop',submit:'Submit',answerQuestions:'Codex needs your input',mcpRequest:'MCP request',blocked:'Blocked by access policy',rawResponse:'Raw response',copy:'Copy',hookPrompt:'Hook prompt',collaboration:'Agent collaboration',subAgent:'Sub-agent activity',webSearch:'Web search',imageView:'Image view',imageGeneration:'Image generation',sleeping:'Waiting',reviewMode:'Review mode',compacted:'Context compacted',permissions:'Permission request',dynamicTool:'Dynamic tool callback',allowTurn:'Allow for turn',denyPermission:'Grant nothing',strictReview:'Strictly review following commands',supportNative:'Native',supportManual:'Manual tool host',supportPlatform:'Platform-only',allowAlways:'Allow suggested rule'}};
+const tr=k=>T[state.lang][k]||k;
+function applyI18n(){document.documentElement.lang=state.lang==='zh'?'zh-CN':'en';document.querySelectorAll('[data-i18n]').forEach(e=>e.textContent=tr(e.dataset.i18n));document.querySelectorAll('[data-i18n-placeholder]').forEach(e=>e.placeholder=tr(e.dataset.i18nPlaceholder));document.querySelectorAll('[data-i18n-title]').forEach(e=>e.title=tr(e.dataset.i18nTitle));renderThreads();renderApprovals();renderModelControls();updateStatus()}
+async function api(path,options={}){const r=await fetch(path,{credentials:'same-origin',...options,headers:{...(options.body?{'Content-Type':'application/json'}:{}),...(options.headers||{})}});const body=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(body.message||body.error||`HTTP ${r.status}`);e.status=r.status;e.body=body;throw e}return body}
+async function rpc(method,params={}){return(await api('/api/rpc',{method:'POST',body:JSON.stringify({method,params})})).result}
+const respond=(id,result)=>api('/api/respond',{method:'POST',body:JSON.stringify({id,result})});
+const respondError=(id,error)=>api('/api/respond',{method:'POST',body:JSON.stringify({id,error})});
+const hasRequest=m=>Boolean(state.methods?.requests?.some(x=>x.method===m));
+function toast(text,kind=''){const e=document.createElement('div');e.className=`toast ${kind}`;e.textContent=text;$('toastRegion').append(e);setTimeout(()=>e.remove(),4500)}
+function shortDate(v){if(!v)return'';const ms=v>1e10?v:v*1000;try{return new Intl.DateTimeFormat(state.lang==='zh'?'zh-CN':'en',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(ms))}catch{return''}}
+function threadTitle(t){return t?.name||t?.title||t?.preview||t?.id||'Thread'}
+function threadStatus(t){return String(t?.status?.type||t?.status||'').toLowerCase()}
+function normalizeThreads(r){return r?.data||r?.threads||r?.items||(Array.isArray(r)?r:[])}
+async function refreshThreads(){try{const r=await rpc('thread/list',{limit:100,sortKey:'updated_at',sortDirection:'desc'});state.threads=normalizeThreads(r);renderThreads()}catch(e){console.warn(e)}}
+function renderThreads(){const root=$('threadList');if(!root)return;const q=$('threadSearch')?.value.trim().toLowerCase()||'';const list=state.threads.filter(t=>!q||threadTitle(t).toLowerCase().includes(q)||String(t.id||'').toLowerCase().includes(q));const nodes=list.map(t=>{const d=document.createElement('div');d.className='thread'+(state.currentThread?.id===t.id?' active':'');d.setAttribute('role','listitem');const title=document.createElement('div');title.className='thread-title';title.textContent=threadTitle(t);const meta=document.createElement('div');meta.className='thread-meta';const dot=document.createElement('span');dot.className='thread-status-dot'+(/running|progress|active/.test(threadStatus(t))?' running':'');const txt=document.createElement('span');txt.textContent=[threadStatus(t),shortDate(t.updatedAt||t.createdAt)].filter(Boolean).join(' · ');meta.append(dot,txt);d.append(title,meta);d.onclick=()=>{closeMobileSidebar();selectThread(t.id)};return d});if(!nodes.length){const e=document.createElement('div');e.className='thread-meta';e.style.padding='12px';e.textContent=tr('noThreads');nodes.push(e)}root.replaceChildren(...nodes)}
+function inferActiveTurnId(thread){const turns=Array.isArray(thread?.turns)?thread.turns:[];for(let i=turns.length-1;i>=0;i--){const s=String(turns[i]?.status?.type||turns[i]?.status||'').toLowerCase().replace(/[ -]/g,'');if(['inprogress','running','active','working'].includes(s))return turns[i].id||null}return null}
+function textFromContent(content){if(!Array.isArray(content))return'';return content.map(x=>typeof x==='string'?x:(x?.text||x?.input_text||x?.output_text||x?.path||'')).filter(Boolean).join('\n')}
+function el(tag,cls,text){const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n}
+function richText(text){const root=el('div','rich-text');const src=String(text||'');const fence=/```([^\n]*)\n([\s\S]*?)```/g;let last=0,m;const addPlain=s=>{s.split(/\n{2,}/).filter(Boolean).forEach(p=>{const n=el('p');n.textContent=p;root.append(n)})};while((m=fence.exec(src))){addPlain(src.slice(last,m.index));const wrap=el('div','code-block');const pre=el('pre');const code=el('code','',m[2]);pre.append(code);const b=el('button','copy-code',tr('copy'));b.type='button';b.onclick=()=>navigator.clipboard?.writeText(m[2]);wrap.append(pre,b);root.append(wrap);last=m.index+m[0].length}addPlain(src.slice(last));return root}
+function itemKey(item){return item?.id||`${item?.type||'item'}-${Math.random().toString(36).slice(2)}`}
+function activity(title,subtitle='',status=''){const card=el('div','activity-card item');const head=el('div','activity-head');const left=el('div','activity-title');left.append(el('span','activity-icon','›'),el('span','',title));if(subtitle)left.append(el('span','activity-subtitle',subtitle));const meta=el('div','activity-meta');if(status)meta.append(el('span',`status-badge ${String(status).toLowerCase()}`,String(status)));head.append(left,meta);const body=el('div','activity-body');card.append(head,body);return{card,body,meta}}
+function setStreamText(id,kind,text){if(id)state.streamText.set(`${id}:${kind}`,String(text||''))}
+function getStreamText(id,kind,fallback=''){return state.streamText.get(`${id}:${kind}`)??String(fallback||'')}
+function renderUser(item){const n=el('div','message user item');n.dataset.itemId=itemKey(item);n.append(el('div','message-label',tr('user')),el('div','message-bubble',textFromContent(item.content)||item.text||''));return n}
+function renderAgent(item){const id=itemKey(item),n=el('div','message agent item');n.dataset.itemId=id;n.append(el('div','message-label',tr('agent')));const body=el('div','message-body');body.dataset.streamTarget='agent';setStreamText(id,'agent',item.text||'');body.replaceChildren(richText(item.text||''));n.append(body);return n}
+function renderReasoning(item){const id=itemKey(item),d=el('details','reasoning-card item');d.dataset.itemId=id;const s=el('summary','',tr('thinking')),body=el('div','reasoning-content');body.dataset.streamTarget='reasoning';const text=[...(item.summary||[]),...(item.content||[])].join('\n');setStreamText(id,'reasoning',text);body.textContent=text;d.append(s,body);return d}
+function renderPlan(item){const id=itemKey(item),n=el('div','plan-card item');n.dataset.itemId=id;n.dataset.streamTarget='plan';setStreamText(id,'plan',item.text||'');n.textContent=item.text||'';return n}
+function renderCommand(item){const id=itemKey(item),a=activity(tr('command'),item.command||'',item.status?.type||item.status||'');a.card.dataset.itemId=id;a.body.append(el('div','command-line',item.command||''));if(item.cwd)a.body.append(el('div','muted',item.cwd));const out=el('pre','terminal-output',item.aggregatedOutput||'');out.dataset.streamTarget='command';setStreamText(id,'command',item.aggregatedOutput||'');a.body.append(out);if(item.exitCode!=null||item.durationMs!=null)a.meta.append(el('span','',(item.exitCode!=null?'exit '+item.exitCode:'')+(item.durationMs!=null?' · '+item.durationMs+'ms':'')));return a.card}
+function renderFileChange(item){const a=activity(tr('files'),' ',item.status);a.card.dataset.itemId=itemKey(item);a.body.dataset.streamTarget='file';for(const c of item.changes||[]){const row=el('div','file-row');row.append(el('div','file-path',c.path||''),el('div','file-kind',String(c.kind?.type||c.kind||'')));if(c.diff)row.append(el('pre','diff-output',c.diff));a.body.append(row)}return a.card}
+function renderTool(item){const title=item.type==='mcpToolCall'?`${item.server||'MCP'} · ${item.tool||''}`:`${item.namespace?item.namespace+' · ':''}${item.tool||tr('tool')}`;const a=activity(tr('tool'),title,item.status);a.card.dataset.itemId=itemKey(item);a.body.append(el('pre','generic-json',JSON.stringify({arguments:item.arguments,result:item.result,error:item.error,contentItems:item.contentItems},null,2)));return a.card}
+function renderHookPrompt(item){const a=activity(tr('hookPrompt'));a.card.dataset.itemId=itemKey(item);a.body.append(richText((item.fragments||[]).map(x=>x?.text||x?.content||JSON.stringify(x)).join('\n')));return a.card}
+function renderCollab(item){const a=activity(tr('collaboration'),String(item.tool||''),item.status);a.card.dataset.itemId=itemKey(item);if(item.prompt)a.body.append(richText(item.prompt));a.body.append(el('pre','generic-json',JSON.stringify({from:item.senderThreadId,to:item.receiverThreadIds,model:item.model,reasoningEffort:item.reasoningEffort,agentsStates:item.agentsStates},null,2)));return a.card}
+function renderSubAgent(item){const a=activity(tr('subAgent'),String(item.kind||''));a.card.dataset.itemId=itemKey(item);a.body.append(el('div','file-path',item.agentPath||item.agentThreadId||''));return a.card}
+function renderWebSearch(item){const a=activity(tr('webSearch'),item.query||'');a.card.dataset.itemId=itemKey(item);if(item.action)a.body.append(el('pre','generic-json',JSON.stringify(item.action,null,2)));for(const r of (item.results||[]).slice(0,20)){const row=el('div','search-result'),title=String(r?.title||r?.name||r?.url||'Result');if(typeof r?.url==='string'&&/^https?:\/\//.test(r.url)){const link=el('a','search-result-title',title);link.href=r.url;link.target='_blank';link.rel='noopener noreferrer';row.append(link)}else row.append(el('div','search-result-title',title));if(r?.snippet||r?.description||r?.text)row.append(el('div','muted',String(r.snippet||r.description||r.text)));a.body.append(row)}return a.card}
+function renderImageView(item){const a=activity(tr('imageView'),item.path||'');a.card.dataset.itemId=itemKey(item);a.body.append(el('div','file-path',item.path||''));return a.card}
+function renderSleep(item){const a=activity(tr('sleeping'),item.durationMs!=null?item.durationMs+'ms':'');a.card.dataset.itemId=itemKey(item);a.body.classList.add('hidden');return a.card}
+function renderImageGeneration(item){const a=activity(tr('imageGeneration'),item.savedPath||'',item.status||'');a.card.dataset.itemId=itemKey(item);if(item.revisedPrompt)a.body.append(richText(item.revisedPrompt));if(typeof item.result==='string'&&item.result.startsWith('data:image/')){const image=document.createElement('img');image.className='generated-image';image.src=item.result;image.alt=item.revisedPrompt||'Generated image';a.body.append(image)}else if(item.result)a.body.append(el('pre','generic-json',String(item.result).slice(0,4000)));if(item.savedPath)a.body.append(el('div','file-path',item.savedPath));if(item.failure)a.body.append(el('pre','tool-error',JSON.stringify(item.failure,null,2)));return a.card}
+function renderReviewMode(item){const a=activity(tr('reviewMode'),item.type==='enteredReviewMode'?'Entered':'Exited');a.card.dataset.itemId=itemKey(item);if(item.review)a.body.append(richText(item.review));return a.card}
+function renderContextCompaction(item){const a=activity(tr('compacted'));a.card.dataset.itemId=itemKey(item);a.body.classList.add('hidden');return a.card}
+function renderGeneric(item){const a=activity(item.type||'Item','',item.status?.type||item.status||'');a.card.dataset.itemId=itemKey(item);a.body.append(el('pre','generic-json',JSON.stringify(item,null,2)));return a.card}
+function renderItem(item){if(!item||typeof item!=='object')return el('div','item',String(item));switch(item.type){case'userMessage':return renderUser(item);case'hookPrompt':return renderHookPrompt(item);case'agentMessage':return renderAgent(item);case'plan':return renderPlan(item);case'reasoning':return renderReasoning(item);case'commandExecution':return renderCommand(item);case'fileChange':return renderFileChange(item);case'mcpToolCall':case'dynamicToolCall':return renderTool(item);case'collabAgentToolCall':return renderCollab(item);case'subAgentActivity':return renderSubAgent(item);case'webSearch':return renderWebSearch(item);case'imageView':return renderImageView(item);case'sleep':return renderSleep(item);case'imageGeneration':return renderImageGeneration(item);case'enteredReviewMode':case'exitedReviewMode':return renderReviewMode(item);case'contextCompaction':return renderContextCompaction(item);default:return renderGeneric(item)}}
+function rememberLive(node,item){if(item?.id){const id=String(item.id);state.liveItems.set(id,node);const queued=state.pendingDeltas.get(id);if(queued){for(const x of queued)applyDelta(node,id,x.kind,x.delta,x.params);state.pendingDeltas.delete(id)}}}
+function renderThread(thread){state.currentThread=thread;state.activeTurnId=inferActiveTurnId(thread);state.liveItems.clear();state.pendingDeltas.clear();state.streamText.clear();$('threadTitle').textContent=threadTitle(thread);$('workspaceChip').textContent=thread.cwd||state.meta?.workspace||'—';$('workspaceHeader').textContent=thread.cwd||state.meta?.workspace||'—';$('emptyState').classList.add('hidden');$('timeline').classList.remove('hidden');const nodes=[];for(const turn of thread?.turns||[]){const block=el('div','turn-block');block.dataset.turnId=turn.id||'';for(const item of turn?.items||[]){const node=renderItem(item);rememberLive(node,item);block.append(node)}nodes.push(block)}$('timeline').replaceChildren(...nodes);scrollBottom(true);renderThreads();updateStatus()}
+async function selectThread(id,{quiet=false}={}){if(!quiet)$('statusLine').textContent='…';try{const r=await rpc('thread/read',{threadId:id,includeTurns:true});renderThread(r.thread||r)}catch(e){$('statusLine').textContent=e.message;toast(e.message,'error')}}
+function openNewThreadModal(){state.newThreadResolver=null;$('newThreadError').textContent='';$('newThreadCwd').value=state.currentThread?.cwd||state.meta?.workspace||'';$('newThreadModal').classList.remove('hidden');requestAnimationFrame(()=>$('newThreadCwd').focus())}
+function closeNewThreadModal(){$('newThreadModal').classList.add('hidden');state.newThreadResolver=null}
+async function createThread(cwd){const workspace=(cwd||'').trim()||state.meta?.workspace;if(!workspace)return null;try{const p={cwd:workspace};const model=$('modelSelect').value;if(model)p.model=model;const r=await rpc('thread/start',p);const thread=r.thread||r;closeNewThreadModal();await refreshThreads();renderThread(thread);return thread}catch(e){$('newThreadError').textContent=`${tr('threadCreateFailed')}: ${e.message}`;toast(e.message,'error');return null}}
+function loadedIds(r){const v=r?.data||r?.threadIds||r?.threads||r;return Array.isArray(v)?v.map(x=>typeof x==='string'?x:x?.id).filter(Boolean):[]}
+async function ensureThreadLoaded(id){if(hasRequest('thread/loaded/list')){const r=await rpc('thread/loaded/list',{});if(loadedIds(r).includes(id))return}if(hasRequest('thread/resume'))await rpc('thread/resume',{threadId:id})}
+function optimisticUser(text){if(!$('timeline').classList.contains('hidden')){const n=renderUser({type:'userMessage',id:`local-${Date.now()}`,content:[{type:'text',text,text_elements:[]}]});n.classList.add('pending');const block=el('div','turn-block');block.append(n);$('timeline').append(block);scrollBottom(true)}}
+async function sendPrompt(){const text=$('prompt').value.trim();if(!text)return;if(!state.currentThread){state.newThreadResolver=text;openNewThreadModal();state.newThreadResolver=text;return}$('send').disabled=true;try{await ensureThreadLoaded(state.currentThread.id);optimisticUser(text);const p={threadId:state.currentThread.id,input:[{type:'text',text,text_elements:[]}]};const model=$('modelSelect').value,effort=$('effortSelect').value;if(model)p.model=model;if(effort)p.effort=effort;const r=await rpc('turn/start',p);state.activeTurnId=r?.turn?.id||r?.id||null;$('prompt').value='';resizePrompt();updateStatus();setTimeout(()=>selectThread(state.currentThread.id,{quiet:true}),400)}catch(e){toast(`${tr('sendFailed')}: ${e.message}`,'error')}finally{$('send').disabled=false}}
+async function interrupt(){if(!state.currentThread?.id||!state.activeTurnId)return;try{await rpc('turn/interrupt',{threadId:state.currentThread.id,turnId:state.activeTurnId})}catch(e){toast(e.message,'error')}}
+function findItem(id){return id?state.liveItems.get(String(id))||null:null}
+function streamTarget(node,kind){if(!node)return null;if(kind==='plan')return node.matches('[data-stream-target="plan"]')?node:null;return node.querySelector('[data-stream-target="'+CSS.escape(kind)+'"]')}
+function applyDelta(node,id,kind,delta,params={}){if(kind==='file-patch'){const t=streamTarget(node,'file');if(!t)return false;const patch=params.patch||params.diff||params.delta||delta;if(patch){let pre=t.querySelector('[data-live-patch="1"]');if(!pre){pre=el('pre','diff-output');pre.dataset.livePatch='1';t.append(pre)}pre.textContent=String(patch)}return true}const t=streamTarget(node,kind);if(!t)return false;const next=getStreamText(id,kind,t.textContent)+String(delta||'');setStreamText(id,kind,next);if(kind==='agent')t.replaceChildren(richText(next));else t.textContent=next;return true}
+function queueDelta(id,kind,delta,params={}){if(!id)return;const key=String(id),node=findItem(key);if(node&&applyDelta(node,key,kind,delta,params))return;const q=state.pendingDeltas.get(key)||[];q.push({kind,delta:String(delta||''),params});if(q.length>256)q.splice(0,q.length-256);state.pendingDeltas.set(key,q)}
+function notificationItemId(p){return p?.itemId||p?.item?.id||p?.id||null}
+function belongsHere(p){const id=p?.threadId||p?.thread?.id||p?.turn?.threadId;return !id||!state.currentThread||id===state.currentThread.id}
+function appendLive(message){const p=message?.params||{};if(!belongsHere(p))return;const m=message.method;if(m==='turn/started'){state.activeTurnId=p.turn?.id||p.turnId||state.activeTurnId;updateStatus();return}if(m==='turn/completed'){state.activeTurnId=null;updateStatus();setTimeout(()=>state.currentThread&&selectThread(state.currentThread.id,{quiet:true}),180);refreshThreads();return}const blockFor=()=>{let b=$('timeline').querySelector('[data-turn-id="'+CSS.escape(String(p.turnId||''))+'"]');if(!b){b=el('div','turn-block');b.dataset.turnId=p.turnId||'';$('timeline').append(b)}return b};if(m==='item/started'||m==='item/completed'){const item=p.item;if(!item)return;const old=item.id?findItem(item.id):null,node=renderItem(item);rememberLive(node,item);if(old)old.replaceWith(node);else blockFor().append(node);scrollBottom();return}const kind=TIMELINE_DELTA_NOTIFICATIONS[m];if(kind){queueDelta(notificationItemId(p),kind,p.delta??p.textDelta??p.outputDelta??p.message??'',p);scrollBottom();return}if(m==='item/reasoning/summaryPartAdded'){queueDelta(notificationItemId(p),'reasoning','\n',p);return}if(m==='thread/tokenUsage/updated'){state.tokenUsage=p.tokenUsage||p.usage||p;updateStatus();return}if(m==='serverRequest/resolved'){const rid=p.requestId??p.id;if(rid!==undefined){state.pendingRequests.delete(String(rid));renderApprovals()}return}if(m==='thread/name/updated'){if(state.currentThread&&p.threadId===state.currentThread.id){state.currentThread.name=p.name;$('threadTitle').textContent=threadTitle(state.currentThread)}refreshThreads();return}if(/^thread\/(archived|unarchived|deleted|closed|started)$/.test(m)||m==='thread/status/changed'){refreshThreads();return}if(['error','warning','configWarning','guardianWarning','deprecationNotice'].includes(m)){toast(p.message||p.error?.message||m,m==='error'?'error':'warning');return}if(p.turnId||p.itemId){const b=blockFor(),d=el('details','system-event item');d.append(el('summary','',m),el('pre','generic-json',JSON.stringify(p,null,2)));b.append(d)}}
+async function resyncAuthoritativeState(){$('statusLine').textContent=tr('resyncing');await Promise.allSettled([refreshThreads(),state.currentThread?.id?selectThread(state.currentThread.id,{quiet:true}):Promise.resolve(),refreshMeta()])}
+function connectEvents(){state.eventSource?.close();const es=new EventSource('/api/events',{withCredentials:true});state.eventSource=es;es.onmessage=async ev=>{let e;try{e=JSON.parse(ev.data)}catch{return}if(e.type==='connected'){state.pendingRequests.clear();for(const r of e.payload?.pendingServerRequests||[])state.pendingRequests.set(String(r.id),r);renderApprovals();if(state.eventConnectedOnce)await resyncAuthoritativeState();state.eventConnectedOnce=true;hideBanner();return}if(e.type==='serverRequest'){state.pendingRequests.set(String(e.payload.id),e.payload);renderApprovals();return}if(e.type==='serverRequestsCleared'){for(const id of e.payload?.ids||[])state.pendingRequests.delete(String(id));renderApprovals();return}if(e.type==='notification')appendLive(e.payload);if(e.type==='protocolMismatch')showBanner(tr('protocolMismatch'));if(['eventOversize','codexReady'].includes(e.type))await resyncAuthoritativeState();if(['codexError','codexRestartFailed','serverRequestUnsupported'].includes(e.type))showBanner(e.payload?.message||e.payload?.method||tr('degraded'))};es.onerror=()=>showBanner(tr('reconnect'))}
+function showBanner(t){$('connectionBanner').textContent=t;$('connectionBanner').classList.remove('hidden')}function hideBanner(){$('connectionBanner').classList.add('hidden')}
+function requestSummary(r){const p=r.params||{};if(r.method.includes('commandExecution')||r.method==='execCommandApproval')return p.command||p.reason||p.cwd||'';if(r.method.includes('fileChange')||r.method==='applyPatchApproval')return p.reason||'';if(r.method==='item/tool/requestUserInput')return tr('answerQuestions');if(r.method==='mcpServer/elicitation/request')return p.message||p.serverName||tr('mcpRequest');if(r.method==='item/permissions/requestApproval')return p.reason||p.cwd||tr('permissions');if(r.method==='item/tool/call')return (p.namespace?p.namespace+' · ':'')+(p.tool||tr('dynamicTool'));return r.method}
+function actionButton(label,cls,fn){const b=el('button',cls,label);b.type='button';b.onclick=fn;return b}
+function supportLabel(s){if(String(s).startsWith('native'))return tr('supportNative');if(s==='manual-tool-host')return tr('supportManual');if(s==='platform-only')return tr('supportPlatform');return s}
+function decisionCard(r){const card=baseApproval(r),p=r.params||{},actions=el('div','approval-actions');if(p.command)card.append(el('pre','approval-command',p.command));actions.append(actionButton(tr('decline'),'secondary-button',()=>answerRequest(r,{decision:'decline'})),actionButton(tr('cancel'),'danger-button',()=>answerRequest(r,{decision:'cancel'})),actionButton(tr('allowSession'),'secondary-button',()=>answerRequest(r,{decision:'acceptForSession'})));if(p.proposedExecpolicyAmendment)actions.append(actionButton(tr('allowAlways'),'secondary-button',()=>answerRequest(r,{decision:{acceptWithExecpolicyAmendment:{execpolicy_amendment:p.proposedExecpolicyAmendment}}})));for(const amendment of p.proposedNetworkPolicyAmendments||[])actions.append(actionButton(tr('allowAlways'),'secondary-button',()=>answerRequest(r,{decision:{applyNetworkPolicyAmendment:{network_policy_amendment:amendment}}})));actions.append(actionButton(tr('allow'),'primary-button',()=>answerRequest(r,{decision:'accept'})));card.append(actions);return card}
+function baseApproval(r){const card=el('div','approval-card'),head=el('div','approval-title-row');head.append(el('h4','',r.method),el('span','support-badge '+serverRequestSupport(r.method),supportLabel(serverRequestSupport(r.method))));card.append(head,el('p','',requestSummary(r)));return card}
+function userInputCard(r){const card=baseApproval(r),answers={};for(const q of r.params?.questions||[]){const wrap=el('div','approval-question');wrap.append(el('label','',q.header||q.question||q.id));if(q.question&&q.header)wrap.append(el('small','',q.question));if(q.options?.length){const list=el('div','option-list');for(const o of q.options){const b=el('button','option-button',o.label);b.type='button';b.onclick=()=>{list.querySelectorAll('.option-button').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');answers[q.id]={answers:[o.label]}};list.append(b)}wrap.append(list)}else{const input=document.createElement(q.isOther?'textarea':'input');if(!q.isOther)input.type=q.isSecret?'password':'text';input.oninput=()=>answers[q.id]={answers:[input.value]};wrap.append(input)}card.append(wrap)}const actions=el('div','approval-actions');actions.append(actionButton(tr('submit'),'primary-button',()=>answerRequest(r,{answers})));card.append(actions);return card}
+function mcpCard(r){const p=r.params||{},card=baseApproval(r),values={},schema=p.requestedSchema||{};if((p.mode==='form'||p.mode==='openai/form')&&schema.properties){for(const [key,s]of Object.entries(schema.properties)){const wrap=el('div','approval-question');wrap.append(el('label','',s.title||key));if(s.description)wrap.append(el('small','',s.description));const input=document.createElement(s.enum?'select':'input');if(s.enum){for(const v of s.enum)input.append(new Option(String(v),JSON.stringify(v)))}else input.type=s.type==='boolean'?'checkbox':(s.format==='password'?'password':'text');const apply=()=>{if(input.type==='checkbox')values[key]=input.checked;else if(s.enum){try{values[key]=JSON.parse(input.value)}catch{values[key]=input.value}}else values[key]=input.value};input.onchange=apply;input.oninput=apply;apply();wrap.append(input);card.append(wrap)}}else if(p.url){const link=el('a','approval-url',p.url);link.href=p.url;link.target='_blank';link.rel='noopener noreferrer';card.append(link)}const actions=el('div','approval-actions');actions.append(actionButton(tr('decline'),'secondary-button',()=>answerRequest(r,{action:'decline',content:null,_meta:null})),actionButton(tr('cancel'),'danger-button',()=>answerRequest(r,{action:'cancel',content:null,_meta:null})),actionButton(tr('allow'),'primary-button',()=>answerRequest(r,{action:'accept',content:p.mode==='url'?null:values,_meta:null})));card.append(actions);return card}
+function legacyDecisionCard(r){const card=baseApproval(r),p=r.params||{},actions=el('div','approval-actions');if(p.command)card.append(el('pre','approval-command',p.command));actions.append(actionButton(tr('decline'),'secondary-button',()=>answerRequest(r,{decision:{denied:{rejection:'Denied by user'}}})),actionButton(tr('cancel'),'danger-button',()=>answerRequest(r,{decision:'abort'})),actionButton(tr('allowSession'),'secondary-button',()=>answerRequest(r,{decision:'approved_for_session'})),actionButton(tr('allow'),'primary-button',()=>answerRequest(r,{decision:'approved'})));card.append(actions);return card}
+function permissionCard(r){const card=baseApproval(r),p=r.params||{},strict=document.createElement('input');strict.type='checkbox';card.append(el('pre','generic-json',JSON.stringify(p.permissions,null,2)));const label=el('label','strict-review-toggle');label.append(strict,document.createTextNode(' '+tr('strictReview')));card.append(label);const granted=()=>{const x={};if(p.permissions?.network!=null)x.network=p.permissions.network;if(p.permissions?.fileSystem!=null)x.fileSystem=p.permissions.fileSystem;return x},response=(scope,permissions)=>({permissions,scope,...(strict.checked?{strictAutoReview:true}:{})}),actions=el('div','approval-actions');actions.append(actionButton(tr('denyPermission'),'secondary-button',()=>answerRequest(r,response('turn',{}))),actionButton(tr('allowTurn'),'secondary-button',()=>answerRequest(r,response('turn',granted()))),actionButton(tr('allowSession'),'primary-button',()=>answerRequest(r,response('session',granted()))));card.append(actions);return card}
+function dynamicToolCard(r){const card=baseApproval(r),ta=document.createElement('textarea');ta.rows=5;ta.value=JSON.stringify({contentItems:[],success:true},null,2);card.append(el('pre','generic-json',JSON.stringify(r.params,null,2)),ta);const actions=el('div','approval-actions');actions.append(actionButton(tr('cancel'),'danger-button',()=>respondError(r.id,{code:-32000,message:'Dynamic tool call cancelled by Web user'}).then(()=>{state.pendingRequests.delete(String(r.id));renderApprovals()})),actionButton(tr('submit'),'primary-button',()=>{try{const v=JSON.parse(ta.value);if(!Array.isArray(v.contentItems)||typeof v.success!=='boolean')throw new Error('Expected contentItems[] and success boolean');answerRequest(r,v)}catch(e){toast(e.message,'error')}}));card.append(actions);return card}
+function rawCard(r){const card=baseApproval(r),pre=el('pre','',JSON.stringify(r.params,null,2)),ta=document.createElement('textarea');ta.rows=4;ta.value='{}';ta.style.width='100%';card.append(pre,ta);const a=el('div','approval-actions');a.append(actionButton(tr('submit'),'primary-button',()=>{try{answerRequest(r,JSON.parse(ta.value))}catch{toast('Invalid JSON','error')}}));card.append(a);return card}
+function renderApprovals(){const root=$('approvalTray');if(!root)return;const nodes=[];for(const r of state.pendingRequests.values()){if(['item/commandExecution/requestApproval','item/fileChange/requestApproval'].includes(r.method))nodes.push(decisionCard(r));else if(['execCommandApproval','applyPatchApproval'].includes(r.method))nodes.push(legacyDecisionCard(r));else if(r.method==='item/tool/requestUserInput')nodes.push(userInputCard(r));else if(r.method==='mcpServer/elicitation/request')nodes.push(mcpCard(r));else if(r.method==='item/permissions/requestApproval')nodes.push(permissionCard(r));else if(r.method==='item/tool/call')nodes.push(dynamicToolCard(r));else nodes.push(rawCard(r))}root.replaceChildren(...nodes)}
+async function answerRequest(r,result){try{await respond(r.id,result);state.pendingRequests.delete(String(r.id));renderApprovals()}catch(e){toast(e.message,'error')}}
+async function refreshMeta(){try{state.meta=await api('/api/meta');updateStatus()}catch(e){console.warn(e)}}
+function updateStatus(){if(!state.meta)return;const ready=state.meta.status==='ready';$('connectionDot').className='connection-dot '+(ready?'ready':'error');$('statusLine').textContent=[ready?tr('ready'):tr('degraded'),state.meta.schema?.codexVersion,state.meta.schema?.experimental?tr('experimental'):tr('stable')].filter(Boolean).join(' · ');$('workingDot').classList.toggle('hidden',!state.activeTurnId);$('interrupt').classList.toggle('hidden',!state.activeTurnId)}
+function normalizeModels(r){return(r?.data||r?.models||[]).filter(x=>x&&!x.hidden)}
+async function loadModels(){if(!hasRequest('model/list'))return;try{state.models=normalizeModels(await rpc('model/list',{}));renderModelControls()}catch(e){console.warn(e)}}
+function currentModel(){return state.models.find(m=>(m.model||m.id)===$('modelSelect').value)}
+function renderEfforts(){if(!$('effortSelect'))return;const prev=$('effortSelect').value,m=currentModel(),opts=[new Option(tr('defaultValue'),'')];for(const x of m?.supportedReasoningEfforts||[]){const v=x.reasoningEffort||x.effort||x;if(typeof v==='string')opts.push(new Option(v,v))}$('effortSelect').replaceChildren(...opts);const def=m?.defaultReasoningEffort||'';$('effortSelect').value=opts.some(o=>o.value===prev)?prev:(opts.some(o=>o.value===def)?def:'')}
+function renderModelControls(){if(!$('modelSelect'))return;const prev=$('modelSelect').value,opts=[new Option(tr('defaultValue'),'')];for(const m of state.models)opts.push(new Option(m.displayName||m.model||m.id,m.model||m.id));$('modelSelect').replaceChildren(...opts);const def=state.models.find(m=>m.isDefault)?.model||'';$('modelSelect').value=opts.some(o=>o.value===prev)?prev:(opts.some(o=>o.value===def)?def:'');renderEfforts()}
+function defaultFromSchema(s,root){if(!s)return{};if(s.default!==undefined)return s.default;if(s.const!==undefined)return s.const;if(s.enum?.length)return s.enum[0];if(s.$ref&&root?.definitions)return defaultFromSchema(root.definitions[s.$ref.split('/').pop()],root);if(s.oneOf?.length)return defaultFromSchema(s.oneOf[0],root);if(s.anyOf?.length)return defaultFromSchema(s.anyOf.find(x=>x.type!=='null')||s.anyOf[0],root);if(s.type==='array')return[];if(s.type==='boolean')return false;if(['integer','number'].includes(s.type))return 0;if(s.type==='string')return'';const o={};for(const k of s.required||[])o[k]=defaultFromSchema(s.properties?.[k],root);return o}
+function methodBucket(){return state.methods?.[$('methodKind').value]||[]}
+function renderMethods(){const q=$('methodSearch').value.trim().toLowerCase(),items=methodBucket().filter(x=>!q||x.method.toLowerCase().includes(q)||(x.description||'').toLowerCase().includes(q));$('methodList').replaceChildren(...items.map(x=>{const d=el('div','method-item'+(state.selectedMethod?.method===x.method?' active':'')+(x.allowed===false?' blocked':''),x.method);d.onclick=()=>selectMethod(x);return d}));if(!state.selectedMethod&&items[0])selectMethod(items[0])}
+async function selectMethod(item){state.selectedMethod=item;$('methodName').textContent=item.method;$('methodDescription').textContent=item.description||'';$('methodRisk').textContent=item.allowed===false?tr('blocked'):(item.risk||'');$('methodRisk').className=`risk-badge ${item.risk||''}`;$('invokeMethod').disabled=item.allowed===false;$('methodSchema').textContent='…';$('methodResult').textContent='';renderMethods();const kind=$('methodKind').value;try{const r=await api(`/api/method-schema?kind=${encodeURIComponent(kind)}&method=${encodeURIComponent(item.method)}`);if(state.selectedMethod!==item)return;item.schema=r.schema;$('methodSchema').textContent=JSON.stringify(r.schema,null,2);$('methodParams').value=JSON.stringify(defaultFromSchema(r.schema,r.schema),null,2)}catch(e){$('methodSchema').textContent=e.message}}
+async function invokeSelected(){const item=state.selectedMethod;if(!item)return;if(item.managed){$('methodResult').textContent='Managed by gateway';return}let p;try{p=JSON.parse($('methodParams').value||'{}')}catch{toast('Invalid JSON','error');return}$('invokeMethod').disabled=true;try{let r;if($('methodKind').value==='requests')r=await rpc(item.method,p);else if($('methodKind').value==='notifications')r=await api('/api/notify',{method:'POST',body:JSON.stringify({method:item.method,params:p})});else throw new Error('Server → client methods are initiated by Codex');$('methodResult').textContent=JSON.stringify(r,null,2)}catch(e){$('methodResult').textContent=JSON.stringify(e.body||{error:e.message},null,2)}finally{$('invokeMethod').disabled=item.allowed===false}}
+function resizePrompt(){const p=$('prompt');p.style.height='auto';p.style.height=Math.min(p.scrollHeight,190)+'px'}
+function nearBottom(){const t=$('timeline');return t.scrollHeight-t.scrollTop-t.clientHeight<100}
+function scrollBottom(force=false){const t=$('timeline');if(force||nearBottom())requestAnimationFrame(()=>{t.scrollTop=t.scrollHeight;$('jumpBottom').classList.add('hidden')})}
+function closeMobileSidebar(){$('sidebar').classList.remove('open');$('sidebarScrim').classList.add('hidden')}
+function openDrawer(){$('protocolPanel').classList.remove('hidden')}
+async function afterLogin(){$('loginModal').classList.add('hidden');[state.meta,state.methods]=await Promise.all([api('/api/meta'),api('/api/methods')]);$('workspaceChip').textContent=state.meta.workspace;$('workspaceHeader').textContent=state.meta.workspace;const s=state.meta.schema,p=state.meta.protocolSupport||protocolSupportSummary();$('schemaSummary').textContent=s.codexVersion+' · '+s.clientRequests+' requests · '+p.threadItemTypes+' Items · '+p.nativeServerRequests+' native · '+s.schemaDigest.slice(0,12);updateStatus();connectEvents();await Promise.all([refreshThreads(),loadModels()]);renderMethods()}
+async function boot(){applyI18n();const session=await api('/api/session');if(session.authRequired&&!session.authenticated){$('loginModal').classList.remove('hidden');return}await afterLogin()}
+$('loginForm').addEventListener('submit',async e=>{e.preventDefault();$('loginError').textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify({token:$('token').value})});$('token').value='';await afterLogin()}catch(x){$('loginError').textContent=x.message}});
+$('newThreadForm').addEventListener('submit',async e=>{e.preventDefault();const pending=state.newThreadResolver;const thread=await createThread($('newThreadCwd').value);if(thread&&pending){$('prompt').value=pending;await sendPrompt()}});
+$('newThread').onclick=openNewThreadModal;$('emptyNewThread').onclick=openNewThreadModal;$('closeNewThread').onclick=closeNewThreadModal;$('cancelNewThread').onclick=closeNewThreadModal;$('workspaceButton').onclick=openNewThreadModal;$('refreshThreads').onclick=refreshThreads;$('reloadThread').onclick=()=>state.currentThread&&selectThread(state.currentThread.id);$('send').onclick=sendPrompt;$('interrupt').onclick=interrupt;$('threadSearch').oninput=renderThreads;$('methodSearch').oninput=renderMethods;$('methodKind').onchange=()=>{state.selectedMethod=null;renderMethods()};$('invokeMethod').onclick=invokeSelected;$('modelSelect').onchange=renderEfforts;$('openProtocol').onclick=openDrawer;$('openProtocolTop').onclick=openDrawer;$('closeProtocol').onclick=()=>$('protocolPanel').classList.add('hidden');$('menuToggle').onclick=()=>{$('sidebar').classList.add('open');$('sidebarScrim').classList.remove('hidden')};$('sidebarScrim').onclick=closeMobileSidebar;$('collapseSidebar').onclick=()=>{$('app').classList.add('sidebar-collapsed');localStorage.setItem('cweb_sidebar','collapsed')};$('expandSidebar').onclick=()=>{$('app').classList.remove('sidebar-collapsed');localStorage.removeItem('cweb_sidebar')};$('langToggle').onclick=()=>{state.lang=state.lang==='zh'?'en':'zh';localStorage.setItem('cweb_lang',state.lang);applyI18n()};$('logout').onclick=async()=>{try{await api('/api/logout',{method:'POST',body:'{}'})}finally{location.reload()}};$('prompt').addEventListener('input',resizePrompt);$('prompt').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();sendPrompt()}});$('timeline').addEventListener('scroll',()=>{$('jumpBottom').classList.toggle('hidden',nearBottom())});$('jumpBottom').onclick=()=>scrollBottom(true);document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openNewThreadModal()}if(e.key==='Escape'){closeMobileSidebar();$('protocolPanel').classList.add('hidden')}});if(localStorage.getItem('cweb_sidebar')==='collapsed')$('app').classList.add('sidebar-collapsed');boot().catch(e=>{console.error(e);$('statusLine').textContent=e.message;toast(e.message,'error')});
 
-const T = {
-  zh: {
-    officialClient:'官方 App Server Web 客户端', newThread:'新建会话', searchThreads:'搜索会话', protocol:'官方接口', logout:'退出',
-    reload:'刷新', stop:'停止', welcome:'Codex Web', emptyTitle:'官方 Codex，浏览器里使用', emptyBody:'通过官方 codex app-server 协议连接，不解析终端，不使用私有接口。',
-    prompt:'给 Codex 发送消息…', send:'发送', searchMethods:'搜索 method', schema:'参数 Schema', params:'参数 JSON', invoke:'调用', loginSub:'安全登录', accessToken:'访问令牌', login:'登录',
-    user:'你', agent:'Codex', loading:'加载中…', ready:'就绪', degraded:'Codex 连接异常', noThreads:'暂无会话', created:'已创建', request:'需要你的确认', accept:'允许', acceptSession:'本会话允许', decline:'拒绝', cancel:'拒绝并停止', respond:'提交响应', invalidJson:'JSON 格式错误', invoking:'调用中…',
-    threadCreateFailed:'新建会话失败', sendFailed:'发送失败', reconnect:'事件流已断开，正在重连', connected:'已连接', interfaceCount:'官方接口', experimental:'实验接口已开启', stable:'Stable-only',
-    model:'模型', reasoning:'推理强度', defaultValue:'默认', protocolMismatch:'检测到上游协议变化，已按官方 schema 拒绝未知事件', resyncing:'正在重新同步…',
-  },
-  en: {
-    officialClient:'Official App Server Web Client', newThread:'New thread', searchThreads:'Search threads', protocol:'Official APIs', logout:'Log out',
-    reload:'Reload', stop:'Stop', welcome:'Codex Web', emptyTitle:'Official Codex, in your browser', emptyBody:'Connected through the official codex app-server protocol. No terminal scraping. No private APIs.',
-    prompt:'Message Codex…', send:'Send', searchMethods:'Search methods', schema:'Parameter schema', params:'Parameters JSON', invoke:'Invoke', loginSub:'Secure sign in', accessToken:'Access token', login:'Sign in',
-    user:'You', agent:'Codex', loading:'Loading…', ready:'Ready', degraded:'Codex connection degraded', noThreads:'No threads yet', created:'Created', request:'Your confirmation is required', accept:'Allow', acceptSession:'Allow for session', decline:'Decline', cancel:'Decline & stop', respond:'Submit response', invalidJson:'Invalid JSON', invoking:'Invoking…',
-    threadCreateFailed:'Failed to create thread', sendFailed:'Failed to send', reconnect:'Event stream disconnected; reconnecting', connected:'Connected', interfaceCount:'official methods', experimental:'Experimental enabled', stable:'Stable-only',
-    model:'Model', reasoning:'Reasoning', defaultValue:'Default', protocolMismatch:'Upstream protocol changed; an unknown event was rejected by the official-schema gate', resyncing:'Resynchronizing…',
-  }
-};
-function tr(key){ return T[state.lang][key] || key; }
-function applyI18n(){
-  document.documentElement.lang = state.lang === 'zh' ? 'zh-CN' : 'en';
-  document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = tr(el.dataset.i18n));
-  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => el.placeholder = tr(el.dataset.i18nPlaceholder));
-  document.querySelectorAll('[data-i18n-title]').forEach(el => el.title = tr(el.dataset.i18nTitle));
-  renderThreads(); renderApprovals(); renderModelControls(); updateStatus();
-}
-
-async function api(path, options={}) {
-  const response = await fetch(path, { credentials:'same-origin', ...options, headers:{ ...(options.body ? {'Content-Type':'application/json'} : {}), ...(options.headers||{}) } });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const error = new Error(body.message || body.error || `HTTP ${response.status}`);
-    error.status = response.status; error.body = body; throw error;
-  }
-  return body;
-}
-async function rpc(method, params={}) { return (await api('/api/rpc',{method:'POST',body:JSON.stringify({method,params})})).result; }
-async function notify(method, params={}) { return api('/api/notify',{method:'POST',body:JSON.stringify({method,params})}); }
-async function respond(id, result){ return api('/api/respond',{method:'POST',body:JSON.stringify({id,result})}); }
-function hasRequest(method){ return Boolean(state.methods?.requests?.some(item => item.method === method)); }
-
-function shortDate(seconds){
-  if (!seconds) return '';
-  const ms = seconds > 10_000_000_000 ? seconds : seconds * 1000;
-  try { return new Intl.DateTimeFormat(state.lang==='zh'?'zh-CN':'en',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(ms)); } catch { return ''; }
-}
-function threadTitle(thread){ return thread.name || thread.title || thread.preview || thread.id || 'Thread'; }
-
-function normalizeThreads(result){ return result?.data || result?.threads || result?.items || (Array.isArray(result) ? result : []); }
-async function refreshThreads(){
-  try {
-    const result = await rpc('thread/list',{limit:100,sortKey:'updated_at',sortDirection:'desc'});
-    state.threads = normalizeThreads(result);
-    renderThreads();
-  } catch (error) { console.warn(error); }
-}
-function renderThreads(){
-  if (!$('threadList')) return;
-  const q = $('threadSearch').value.trim().toLowerCase();
-  const list = state.threads.filter(t => !q || threadTitle(t).toLowerCase().includes(q) || String(t.id||'').toLowerCase().includes(q));
-  $('threadList').replaceChildren(...list.map(thread => {
-    const div=document.createElement('div'); div.className='thread'+(state.currentThread?.id===thread.id?' active':'');
-    const title=document.createElement('div'); title.className='thread-title'; title.textContent=threadTitle(thread);
-    const meta=document.createElement('div'); meta.className='thread-meta'; meta.textContent=[thread.status?.type||thread.status,shortDate(thread.updatedAt||thread.createdAt)].filter(Boolean).join(' · ');
-    div.append(title,meta); div.onclick=()=>{ closeMobileSidebar(); selectThread(thread.id); }; return div;
-  }));
-  if (!list.length) { const p=document.createElement('div'); p.className='thread-meta'; p.style.padding='12px'; p.textContent=tr('noThreads'); $('threadList').replaceChildren(p); }
-}
-
-function extractText(item){
-  if (!item || typeof item !== 'object') return null;
-  if (typeof item.text === 'string') return item.text;
-  if (typeof item.message === 'string') return item.message;
-  if (Array.isArray(item.content)) {
-    const parts=item.content.map(x => typeof x==='string'?x:(x?.text||x?.input_text||x?.output_text||'')).filter(Boolean);
-    if(parts.length) return parts.join('\n');
-  }
-  if (typeof item.delta === 'string') return item.delta;
-  return null;
-}
-function itemRole(item){
-  const type=String(item?.type||item?.kind||'').toLowerCase();
-  if(type.includes('user')) return 'user';
-  if(type.includes('agent')||type.includes('assistant')) return 'agent';
-  return 'event';
-}
-function collectItems(thread){
-  const rows=[];
-  for(const turn of thread?.turns||[]) for(const item of turn?.items||[]) rows.push({turn,item});
-  return rows;
-}
-function turnIsActive(turn){
-  const status=String(turn?.status?.type||turn?.status||'').toLowerCase();
-  return ['inprogress','in_progress','running','active','working'].includes(status.replace(/[ -]/g,''));
-}
-function inferActiveTurnId(thread){
-  const turns=Array.isArray(thread?.turns)?thread.turns:[];
-  for(let i=turns.length-1;i>=0;i--) if(turnIsActive(turns[i])) return turns[i].id || null;
-  return null;
-}
-function renderThread(thread){
-  state.currentThread=thread;
-  state.activeTurnId=inferActiveTurnId(thread);
-  $('threadTitle').textContent=threadTitle(thread);
-  $('workspaceChip').textContent=thread.cwd || state.meta?.workspace || '—';
-  $('emptyState').classList.add('hidden'); $('timeline').classList.remove('hidden');
-  const nodes=[];
-  for(const {item} of collectItems(thread)){
-    const role=itemRole(item), text=extractText(item);
-    if(text && (role==='user'||role==='agent')){
-      const wrap=document.createElement('div'); wrap.className=`message ${role}`;
-      const label=document.createElement('div'); label.className='label'; label.textContent=role==='user'?tr('user'):tr('agent');
-      const body=document.createElement('div'); body.className='body'; body.textContent=text; wrap.append(label,body); nodes.push(wrap);
-    } else {
-      const card=document.createElement('details'); card.className='event-card';
-      const summary=document.createElement('summary'); summary.textContent=item?.type || item?.kind || 'item';
-      const pre=document.createElement('pre'); pre.textContent=JSON.stringify(item,null,2); card.append(summary,pre); nodes.push(card);
-    }
-  }
-  $('timeline').replaceChildren(...nodes);
-  $('timeline').scrollTop=$('timeline').scrollHeight;
-  renderThreads(); updateStatus();
-}
-async function selectThread(id,{quiet=false}={}){
-  if(!quiet) $('statusLine').textContent=tr('loading');
-  try { const result=await rpc('thread/read',{threadId:id,includeTurns:true}); renderThread(result.thread || result); }
-  catch(error){ $('statusLine').textContent=error.message; }
-}
-async function createThread(){
-  const cwd = prompt(state.lang==='zh'?'工作目录（绝对路径）':'Working directory (absolute path)', state.currentThread?.cwd || state.meta?.workspace || '');
-  if(!cwd) return null;
-  try {
-    const params={cwd};
-    const model=$('modelSelect').value; if(model) params.model=model;
-    const result=await rpc('thread/start',params);
-    const thread=result.thread||result; await refreshThreads(); renderThread(thread); return thread;
-  } catch(error){ alert(`${tr('threadCreateFailed')}: ${error.message}`); return null; }
-}
-function loadedIds(result){
-  const value=result?.data || result?.threadIds || result?.threads || result;
-  if(!Array.isArray(value)) return [];
-  return value.map(item => typeof item==='string'?item:item?.id).filter(Boolean);
-}
-async function ensureThreadLoaded(threadId){
-  if(hasRequest('thread/loaded/list')){
-    const current=await rpc('thread/loaded/list',{});
-    if(loadedIds(current).includes(threadId)) return;
-  }
-  if(hasRequest('thread/resume')) await rpc('thread/resume',{threadId});
-}
-async function sendPrompt(){
-  const text=$('prompt').value.trim(); if(!text) return;
-  let thread=state.currentThread || await createThread(); if(!thread) return;
-  $('send').disabled=true;
-  try {
-    await ensureThreadLoaded(thread.id);
-    const params={threadId:thread.id,input:[{type:'text',text}]};
-    const model=$('modelSelect').value; const effort=$('effortSelect').value;
-    if(model) params.model=model; if(effort) params.effort=effort;
-    const result=await rpc('turn/start',params);
-    state.activeTurnId=result?.turn?.id || result?.id || null; $('prompt').value=''; updateStatus();
-    setTimeout(()=>selectThread(thread.id,{quiet:true}),300);
-  } catch(error){ alert(`${tr('sendFailed')}: ${error.message}`); }
-  finally { $('send').disabled=false; }
-}
-async function interrupt(){
-  if(!state.currentThread?.id || !state.activeTurnId) return;
-  try { await rpc('turn/interrupt',{threadId:state.currentThread.id,turnId:state.activeTurnId}); } catch(error){ alert(error.message); }
-}
-
-function eventTitle(message){ return message?.method || 'event'; }
-function appendLiveEvent(message){
-  if(!state.currentThread) return;
-  const threadId=message?.params?.threadId || message?.params?.thread?.id || message?.params?.turn?.threadId;
-  if(threadId && threadId!==state.currentThread.id) return;
-  if(message.method==='turn/started') { state.activeTurnId=message.params?.turn?.id || message.params?.turnId || state.activeTurnId; updateStatus(); }
-  if(message.method==='turn/completed') { state.activeTurnId=null; updateStatus(); setTimeout(()=>selectThread(state.currentThread.id,{quiet:true}),150); refreshThreads(); }
-  if(message.method==='serverRequest/resolved') {
-    const id=message.params?.requestId ?? message.params?.id;
-    if(id!==undefined) { state.pendingRequests.delete(String(id)); renderApprovals(); }
-  }
-  if(message.method==='item/agentMessage/delta' && typeof message.params?.delta==='string'){
-    let live=$('timeline').querySelector('[data-live-agent="1"]');
-    if(!live){ live=document.createElement('div'); live.className='message agent'; live.dataset.liveAgent='1'; const label=document.createElement('div'); label.className='label'; label.textContent=tr('agent'); const body=document.createElement('div'); body.className='body'; live.append(label,body); $('timeline').append(live); }
-    live.querySelector('.body').textContent += message.params.delta; $('timeline').scrollTop=$('timeline').scrollHeight; return;
-  }
-  if(['item/started','item/completed','turn/plan/updated','thread/status/changed'].includes(message.method)){
-    const card=document.createElement('details'); card.className='event-card'; const sum=document.createElement('summary'); sum.textContent=eventTitle(message); const pre=document.createElement('pre'); pre.textContent=JSON.stringify(message.params||{},null,2); card.append(sum,pre); $('timeline').append(card);
-  }
-}
-async function resyncAuthoritativeState(){
-  $('statusLine').textContent=tr('resyncing');
-  await Promise.allSettled([refreshThreads(), state.currentThread?.id ? selectThread(state.currentThread.id,{quiet:true}) : Promise.resolve(), refreshMeta()]);
-}
-function connectEvents(){
-  if(state.eventSource) state.eventSource.close();
-  const es=new EventSource('/api/events',{withCredentials:true}); state.eventSource=es;
-  es.onmessage=async(event)=>{
-    let envelope; try{envelope=JSON.parse(event.data);}catch{return;}
-    if(envelope.type==='connected'){
-      state.pendingRequests.clear();
-      for(const request of envelope.payload?.pendingServerRequests||[]) state.pendingRequests.set(String(request.id),request);
-      renderApprovals();
-      if(state.eventConnectedOnce) await resyncAuthoritativeState();
-      state.eventConnectedOnce=true;
-      return;
-    }
-    const message=envelope.payload;
-    if(envelope.type==='serverRequest') { state.pendingRequests.set(String(message.id),message); renderApprovals(); }
-    if(envelope.type==='serverRequestsCleared') { for(const id of message?.ids||[]) state.pendingRequests.delete(String(id)); renderApprovals(); }
-    if(envelope.type==='notification') appendLiveEvent(message);
-    if(['eventOversize','codexReady'].includes(envelope.type)) await resyncAuthoritativeState();
-    if(envelope.type==='protocolMismatch') $('statusLine').textContent=tr('protocolMismatch');
-  };
-  es.onerror=()=>{ $('statusLine').textContent=tr('reconnect'); };
-}
-
-function approvalPreset(method){
-  return method==='item/commandExecution/requestApproval' || method==='item/fileChange/requestApproval';
-}
-function renderApprovals(){
-  if(!$('approvalTray')) return;
-  const nodes=[];
-  for(const request of state.pendingRequests.values()){
-    const card=document.createElement('div'); card.className='approval-card';
-    const h=document.createElement('h4'); h.textContent=`${tr('request')} · ${request.method}`;
-    const pre=document.createElement('pre'); pre.textContent=JSON.stringify(request.params,null,2); card.append(h,pre);
-    const actions=document.createElement('div'); actions.className='approval-actions';
-    if(approvalPreset(request.method)){
-      for(const [label,decision,cls] of [[tr('decline'),'decline','ghost'],[tr('cancel'),'cancel','danger'],[tr('acceptSession'),'acceptForSession','ghost'],[tr('accept'),'accept','primary']]){
-        const b=document.createElement('button'); b.className=cls; b.textContent=label; b.onclick=()=>answerRequest(request,{decision}); actions.append(b);
-      }
-    } else {
-      const textarea=document.createElement('textarea'); textarea.rows=4; textarea.value='{}'; textarea.style.width='100%'; card.append(textarea);
-      const b=document.createElement('button'); b.className='primary'; b.textContent=tr('respond'); b.onclick=()=>{ try{ answerRequest(request,JSON.parse(textarea.value)); }catch{ alert(tr('invalidJson')); } }; actions.append(b);
-    }
-    card.append(actions); nodes.push(card);
-  }
-  $('approvalTray').replaceChildren(...nodes);
-}
-async function answerRequest(request,result){
-  try { await respond(request.id,result); state.pendingRequests.delete(String(request.id)); renderApprovals(); }
-  catch(error){ alert(error.message); }
-}
-
-async function refreshMeta(){
-  try { state.meta=await api('/api/meta'); updateStatus(); } catch(error){ console.warn(error); }
-}
-function updateStatus(){
-  if(!state.meta || !$('statusLine')) return;
-  const bits=[state.meta.status==='ready'?tr('ready'):tr('degraded'), state.meta.schema?.codexVersion, state.meta.schema?.experimental?tr('experimental'):tr('stable')].filter(Boolean);
-  $('statusLine').textContent=bits.join(' · ');
-  $('interrupt').classList.toggle('hidden',!state.activeTurnId);
-}
-
-function normalizeModels(result){ return (result?.data || result?.models || []).filter(model => model && !model.hidden); }
-async function loadModels(){
-  if(!hasRequest('model/list')) return;
-  try { state.models=normalizeModels(await rpc('model/list',{})); renderModelControls(); } catch(error){ console.warn('model/list',error); }
-}
-function currentModel(){ return state.models.find(model => model.model === $('modelSelect')?.value) || null; }
-function renderEfforts(){
-  if(!$('effortSelect')) return;
-  const previous=$('effortSelect').value;
-  const model=currentModel();
-  const options=[new Option(tr('defaultValue'),'')];
-  for(const item of model?.supportedReasoningEfforts||[]){
-    const value=item.reasoningEffort || item.effort || item;
-    if(typeof value==='string') options.push(new Option(value,value));
-  }
-  $('effortSelect').replaceChildren(...options);
-  const fallback=model?.defaultReasoningEffort || '';
-  $('effortSelect').value=options.some(o=>o.value===previous)?previous:(options.some(o=>o.value===fallback)?fallback:'');
-}
-function renderModelControls(){
-  if(!$('modelSelect')) return;
-  const previous=$('modelSelect').value;
-  const options=[new Option(tr('defaultValue'),'')];
-  for(const model of state.models) options.push(new Option(model.displayName || model.model || model.id,model.model || model.id));
-  $('modelSelect').replaceChildren(...options);
-  const defaultModel=state.models.find(model=>model.isDefault)?.model || '';
-  $('modelSelect').value=options.some(o=>o.value===previous)?previous:(options.some(o=>o.value===defaultModel)?defaultModel:'');
-  renderEfforts();
-}
-
-function defaultFromSchema(schema, root){
-  if(!schema) return {};
-  if(schema.default!==undefined) return schema.default;
-  if(schema.const!==undefined) return schema.const;
-  if(schema.enum?.length) return schema.enum[0];
-  if(schema.$ref && root?.definitions){ const key=schema.$ref.split('/').pop(); return defaultFromSchema(root.definitions[key],root); }
-  if(schema.oneOf?.length) return defaultFromSchema(schema.oneOf[0],root);
-  if(schema.anyOf?.length) return defaultFromSchema(schema.anyOf.find(x=>x.type!=='null')||schema.anyOf[0],root);
-  if(schema.type==='array' || (Array.isArray(schema.type)&&schema.type.includes('array'))) return [];
-  if(schema.type==='boolean') return false;
-  if(schema.type==='integer'||schema.type==='number') return 0;
-  if(schema.type==='string') return '';
-  const obj={};
-  for(const key of schema.required||[]) obj[key]=defaultFromSchema(schema.properties?.[key],root);
-  return obj;
-}
-function methodBucket(){ return state.methods?.[$('methodKind').value] || []; }
-function renderMethods(){
-  const q=$('methodSearch').value.trim().toLowerCase(); const items=methodBucket().filter(x=>!q||x.method.toLowerCase().includes(q)||(x.description||'').toLowerCase().includes(q));
-  $('methodList').replaceChildren(...items.map(item=>{ const div=document.createElement('div'); div.className='method-item'+(state.selectedMethod?.method===item.method?' active':''); div.textContent=item.method; div.onclick=()=>selectMethod(item); return div; }));
-  if(!state.selectedMethod && items[0]) selectMethod(items[0]);
-}
-async function selectMethod(item){
-  state.selectedMethod=item; $('methodName').textContent=item.method; $('methodDescription').textContent=item.description||''; $('methodSchema').textContent=tr('loading'); $('methodResult').textContent=''; renderMethods();
-  const kind=$('methodKind').value;
-  try {
-    const response=await api(`/api/method-schema?kind=${encodeURIComponent(kind)}&method=${encodeURIComponent(item.method)}`);
-    if(state.selectedMethod!==item || $('methodKind').value!==kind) return;
-    item.schema=response.schema; $('methodSchema').textContent=JSON.stringify(response.schema,null,2);
-    $('methodParams').value=JSON.stringify(defaultFromSchema(response.schema,response.schema),null,2);
-  } catch(error){ $('methodSchema').textContent=error.message; $('methodParams').value='{}'; }
-}
-async function invokeSelected(){
-  const item=state.selectedMethod; if(!item) return;
-  let params; try{params=JSON.parse($('methodParams').value||'{}');}catch{alert(tr('invalidJson'));return;}
-  if(item.managed){ $('methodResult').textContent=state.lang==='zh'?'该官方生命周期接口已由网关实现并自动管理。':'This official lifecycle method is implemented and automatically managed by the gateway.'; return; }
-  $('invokeMethod').disabled=true; $('methodResult').textContent=tr('invoking');
-  try {
-    let result;
-    if($('methodKind').value==='requests') result=await rpc(item.method,params);
-    else if($('methodKind').value==='notifications') result=await notify(item.method,params);
-    else throw new Error(state.lang==='zh'?'Server→Client 接口由 Codex 主动触发，不能从浏览器伪造调用。':'Server→Client methods are initiated by Codex and cannot be forged from the browser.');
-    $('methodResult').textContent=JSON.stringify(result,null,2);
-  } catch(error){ $('methodResult').textContent=JSON.stringify(error.body||{error:error.message},null,2); }
-  finally { $('invokeMethod').disabled=false; }
-}
-
-function closeMobileSidebar(){ $('sidebar').classList.remove('open'); }
-async function boot(){
-  applyI18n();
-  const session=await api('/api/session');
-  if(session.authRequired && !session.authenticated){ $('loginModal').classList.remove('hidden'); return; }
-  await afterLogin();
-}
-async function afterLogin(){
-  $('loginModal').classList.add('hidden');
-  [state.meta,state.methods]=await Promise.all([api('/api/meta'),api('/api/methods')]);
-  $('workspaceChip').textContent=state.meta.workspace;
-  const s=state.meta.schema; $('schemaSummary').textContent=`${s.codexVersion} · ${s.clientRequests} ${tr('interfaceCount')} · ${s.schemaDigest.slice(0,12)}`;
-  updateStatus(); connectEvents(); await Promise.all([refreshThreads(),loadModels()]); renderMethods();
-}
-
-$('loginForm').addEventListener('submit',async(e)=>{e.preventDefault();$('loginError').textContent='';try{await api('/api/login',{method:'POST',body:JSON.stringify({token:$('token').value})});$('token').value='';await afterLogin();}catch(error){$('loginError').textContent=error.message;}});
-$('newThread').onclick=createThread; $('refreshThreads').onclick=refreshThreads; $('reloadThread').onclick=()=>state.currentThread&&selectThread(state.currentThread.id); $('send').onclick=sendPrompt; $('interrupt').onclick=interrupt;
-$('prompt').addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();sendPrompt();}});
-$('threadSearch').oninput=renderThreads; $('openProtocol').onclick=()=>{$('protocolPanel').classList.remove('hidden');closeMobileSidebar();}; $('closeProtocol').onclick=()=>$('protocolPanel').classList.add('hidden');
-$('methodSearch').oninput=renderMethods; $('methodKind').onchange=()=>{state.selectedMethod=null;renderMethods();}; $('invokeMethod').onclick=invokeSelected;
-$('modelSelect').onchange=renderEfforts;
-$('menuToggle').onclick=()=>$('sidebar').classList.toggle('open');
-$('langToggle').onclick=()=>{state.lang=state.lang==='zh'?'en':'zh';localStorage.setItem('cweb_lang',state.lang);applyI18n();};
-$('logout').onclick=async()=>{try{await api('/api/logout',{method:'POST',body:'{}'});}finally{location.reload();}};
-boot().catch(error=>{console.error(error);$('statusLine').textContent=error.message;});
+// Archive parity sentinel: keep the declared item list reachable from the shipped UI module.
+void THREAD_ITEM_TYPES;

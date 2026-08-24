@@ -1,6 +1,6 @@
 {
   "name": "codex-app-server-web",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -12,7 +12,7 @@
     "test": "node --test test/*.test.mjs",
     "check": "node scripts/check.mjs",
     "seal": "node scripts/seal.mjs",
-    "seal:core": "node scripts/seal-core.mjs",
+    "seal:core": "node scripts/seal-core.mjs && node scripts/protocol-seal.mjs",
     "manifest": "node scripts/source-manifest.mjs",
     "manifest:verify": "node scripts/source-manifest.mjs --verify"
   },
