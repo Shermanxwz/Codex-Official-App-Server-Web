@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { CodexAppServer } from '../src/codex-client.mjs';
 import { OfficialSchemaRegistry } from '../src/schema-registry.mjs';
 
+const APP_VERSION='0.2.0';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const core=spawnSync(process.execPath,['scripts/seal-core.mjs'],{cwd:root,encoding:'utf8',stdio:'inherit',env:process.env});
 if(core.error) throw core.error;
@@ -21,14 +22,35 @@ try{
   const account=await client.request('account/read',{});
   const models=await client.request('model/list',{});
   const threads=await client.request('thread/list',{limit:1,sortKey:'updated_at',sortDirection:'desc'});
+  const hasLoadedList=Boolean(registry.getRequest('thread/loaded/list'));
+  const loaded=hasLoadedList ? await client.request('thread/loaded/list',{}) : null;
   if(!account?.account && account?.requiresOpenaiAuth !== false) throw new Error('Codex account is not signed in/usable on this host');
   if(!models) throw new Error('model/list returned no result');
   if(!threads) throw new Error('thread/list returned no result');
+  if(hasLoadedList && !loaded) throw new Error('thread/loaded/list returned no result');
   const manifest={
-    sealedAt:new Date().toISOString(), codexVersion:registry.version, schemaDigest:registry.digest,
-    codexHome:initialize?.codexHome||null, platformFamily:initialize?.platformFamily||null,
-    platformOs:initialize?.platformOs||null, accountType:account?.account?.type||'configured',
-    modelList:true, threadList:true, officialTransport:'stdio', experimental:false,
+    archiveReady:true,
+    appVersion:APP_VERSION,
+    sealedAt:new Date().toISOString(),
+    node:process.version,
+    codexVersion:registry.version,
+    schemaDigest:registry.digest,
+    protocolExportParity:true,
+    stableMethodCounts:{
+      requests:registry.requests.length,
+      notifications:registry.notifications.length,
+      serverRequests:registry.serverRequests.length,
+      serverNotifications:registry.serverNotifications.length,
+    },
+    codexHome:initialize?.codexHome||null,
+    platformFamily:initialize?.platformFamily||null,
+    platformOs:initialize?.platformOs||null,
+    accountType:account?.account?.type||'configured',
+    checks:{accountRead:true,modelList:true,threadList:true,threadLoadedList:hasLoadedList},
+    officialTransport:'stdio',
+    bidirectionalSchemaGate:true,
+    webSecretsStrippedFromCodexEnvironment:true,
+    experimental:false,
   };
   fs.mkdirSync(path.join(root,'.state'),{recursive:true});
   fs.writeFileSync(path.join(root,'.state','production-seal.json'),JSON.stringify(manifest,null,2)+'\n',{mode:0o600});

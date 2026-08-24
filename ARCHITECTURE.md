@@ -4,53 +4,82 @@
 
 The browser never talks to Codex directly. It talks to a same-origin HTTP gateway. The gateway owns one child `codex app-server --listen stdio://` process and only that process.
 
-The gateway does not interpret or reproduce Codex business logic. It performs four jobs:
+The gateway does not reproduce Codex business logic. It:
 
-1. generate the official JSON Schema with the installed `codex` binary;
-2. construct an allow-list of official client request/notification methods;
-3. bridge schema-approved browser calls to JSONL-over-stdio;
-4. forward Codex notifications/server-initiated requests back to authenticated browsers.
+1. asks the installed official Codex binary to export JSON Schema **and** TypeScript protocol definitions;
+2. requires the two official export sets to agree on method membership;
+3. constructs bidirectional stable protocol registries;
+4. bridges only schema-approved browser messages to JSONL-over-stdio;
+5. forwards only schema-approved Codex notifications/server requests to authenticated browsers;
+6. supervises only its own App Server child.
 
-## 2. Protocol coverage
+## 2. Protocol coverage and drift detection
 
-`OfficialSchemaRegistry` loads `ClientRequest.json`, `ClientNotification.json`, `ServerRequest.json`, and `ServerNotification.json`. Each schema is a tagged `oneOf` whose alternatives contain a fixed `method` enum. The registry extracts those tags at runtime.
+`OfficialSchemaRegistry` loads both export forms for:
 
-This makes API coverage set-based rather than hand-maintained:
+- `ClientRequest`
+- `ClientNotification`
+- `ServerRequest`
+- `ServerNotification`
+
+JSON request alternatives provide the parameter schema used by the generic Official APIs UI. The TypeScript export provides an independent upstream method-set check. JSON is the authoritative current wire schema. Every JSON wire method must be covered by the independent TypeScript export; if TypeScript is missing a JSON wire method, startup fails with `OFFICIAL_PROTOCOL_EXPORT_DRIFT`. TypeScript-only legacy/type exports are retained as diagnostics and are not admitted as current wire methods.
+
+The stable contract is therefore set-based:
 
 ```text
-accepted browser request methods == official ClientRequest method set
-accepted browser notification methods == official ClientNotification method set
-observed server requests == official ServerRequest method set
-observed server notifications == official ServerNotification method set
+implemented client requests      == official stable ClientRequest methods
+implemented client notifications == official stable ClientNotification methods
+accepted server requests         == official stable ServerRequest methods
+accepted server notifications    == official stable ServerNotification methods
 ```
 
-Stable and experimental schemas are generated separately. Stable is the production default.
+Connection lifecycle operations such as `initialize` / `initialized` are implemented by the gateway itself and are not re-exposed for duplicate browser invocation.
 
-## 3. Transport
+Experimental exports use a separate opt-in mode and are outside the archive promise.
 
-App Server Web deliberately uses `stdio`, not the experimental App Server WebSocket listener. Browser streaming uses SSE because the browser only needs a server-to-client event stream; mutations use authenticated same-origin JSON POST requests. Server-initiated Codex requests are answered via a dedicated HTTP endpoint correlated by the official request id.
+## 3. Exact-version schema cache
 
-## 4. No Codex ownership
+Every schema cache contains a manifest with:
 
-The project does not directly operate on files inside `CODEX_HOME`. Official methods such as `config/value/write` may cause **Codex itself** to mutate its own state. That is allowed because the request remains an official Codex operation.
+- exact output of `codex --version`;
+- stable/experimental mode;
+- SHA-256 digest of the JSON and TypeScript exports.
 
-The invariant is therefore `Never bypass Codex`, not `Codex state can never change`.
+When refresh is disabled, all three must match before a cached schema is accepted. This prevents a stale cache from silently widening or narrowing the accepted protocol after a Codex upgrade/downgrade.
 
-## 5. Process isolation
+## 4. Transport
 
-Each gateway instance starts one child App Server and stores its PID only through the Node child-process object. Shutdown sends SIGTERM only to that owned child. There is no process-name lookup and no global kill.
+Codex transport is official `stdio` JSONL, not the experimental App Server network WebSocket listener. Browser mutations use authenticated same-origin JSON POSTs; browser streaming uses SSE.
 
-Other App Server processes are outside the gateway's lifecycle boundary.
+Backpressure is explicit at each boundary: pending RPC count, App Server stdin buffering, JSONL record size, browser event size and slow-client SSE buffering are bounded.
 
-## 6. State
+## 5. Secret and process isolation
 
-Project-owned persistent data is restricted to XDG paths. Stable schemas are cached under the state directory. Browser sessions are memory-only. The systemd install environment file is mode 0600.
+All project-owned `CWEB_*` environment variables are removed before launching **any** Codex subprocess, including version/schema commands and the long-lived App Server. Web login secrets therefore do not become Codex or agent-command environment variables.
 
-## 7. UI architecture
+Each gateway generation tracks an exact child-process object. Shutdown/crash handling signals only that child. There is no process-name lookup or global kill. Unexpected exit rejects pending RPCs, clears stale approval requests and permits a fresh official App Server generation.
 
-The Web UI has two layers:
+## 6. Reconnect and state authority
 
-- dedicated user experience for threads, turns, stream events, approvals, and common operations;
-- a complete Official APIs surface generated from the current method registry.
+The browser never assumes an SSE stream is a durable event log. After reconnect or a detected oversize/gap condition it re-reads authoritative thread/meta state. Uncertain writes are never automatically replayed.
 
-The second layer is a compatibility escape hatch: a newly added stable method becomes usable before a bespoke workflow is written.
+Stored threads are checked with `thread/loaded/list`; when needed they are opened through the official `thread/resume` before a new turn is started.
+
+## 7. No Codex ownership
+
+The project does not directly operate on files inside `CODEX_HOME`. Official methods such as config writes may cause **Codex itself** to change its own state; that is an explicit official operation, not a bypass.
+
+The invariant is `Never bypass Codex`, not `Codex state can never change`.
+
+## 8. State
+
+Project-owned persistent data uses XDG paths. Browser sessions are memory-only. Linux install secrets/service configuration are mode 0600 and the service uses `UMask=0077`.
+
+## 9. UI architecture
+
+The UI has two layers:
+
+- native core UX for threads, turns, model/reasoning selection, streaming, interrupt and approvals;
+- a generic Official APIs surface backed by the exact current parameter schema for every remaining stable client method.
+
+This means a new upstream stable method is wire-usable before a bespoke workflow is designed, while high-frequency workflows remain simple rather than looking like a JSON-RPC debugger.

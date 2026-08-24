@@ -1,55 +1,87 @@
 # Production Seal / 生产封存
 
-The repository distinguishes a portable core seal from a live target-machine seal.
+The repository distinguishes repository integrity, a portable core seal, and the final live target-host seal.
 
-## CORE_SEALED
-
-Run on any machine with the official Codex CLI installed:
+## 1. Repository integrity
 
 ```bash
+npm ci --ignore-scripts
+npm run manifest:verify
 npm test
 npm run check
+```
+
+This verifies the checked-in source manifest, zero runtime npm dependencies, static non-interference/security invariants, protocol-gate architecture and local regression suite.
+
+## 2. `CORE_SEALED`
+
+Run on any machine with an official Codex CLI installed:
+
+```bash
 npm run seal:core
 ```
 
-This proves:
+The core seal additionally proves:
 
-- zero runtime npm dependencies;
-- source invariants and non-interference checks pass;
-- the installed official Codex can export the stable JSON schemas;
-- stable request/server-request sets are non-empty;
-- the exact Codex version and schema SHA-256 are recorded.
+- the installed exact Codex version can export both stable JSON Schema and TypeScript protocol definitions;
+- for all four protocol directions, every JSON wire method is covered by the TypeScript export; TypeScript-only legacy/type exports are recorded but do not expand the wire allow-list;
+- required core stable methods are present;
+- stable server-request coverage is non-empty;
+- exact Codex version, dual-export digest and JSON→TypeScript coverage, source digest and method counts are recorded.
 
-## ARCHIVE_READY
+The script prints:
 
-On the real Linux host, using the same operating-system account that normally runs Codex:
+```text
+CORE_SEALED
+```
+
+## 3. `ARCHIVE_READY`
+
+Run this on the **real Linux host**, as the same OS account that normally uses Codex:
 
 ```bash
 npm run seal
 ```
 
-The production seal additionally starts **its own** official App Server and checks through official RPC that:
+This first repeats the core seal, then starts its **own** real official App Server and verifies through official RPC only:
 
-- `account/read` returns a usable account;
+- initialization over `stdio`;
+- `account/read` returns a usable configured account;
 - `model/list` succeeds;
 - `thread/list` succeeds;
-- initialization completes over stdio.
+- `thread/loaded/list` succeeds when that method exists in the installed stable schema.
 
-Only then does the script print:
+No mutation RPC is required by the seal. The production manifest records platform, exact Codex version, schema digest, stable method counts and security invariants. Only after all checks pass does it print:
 
 ```text
 ARCHIVE_READY
 ```
 
-## Non-interference check with another Codex client
+Hosted CI cannot substitute for this step because it cannot prove the user's actual signed-in account, filesystem/runtime environment or target-host coexistence.
 
-For deployments that also run another Codex client, the final operational check should run one harmless turn in each client in separate test workspaces, then restart/stop Codex App Server Web and confirm the other client continues. No code in this project is allowed to kill or reconfigure the other client's App Server.
+## 4. Coexistence / non-interference test
 
-## 上线原则
+When the target host also runs another Codex client:
 
-- Stable-only：`CWEB_EXPERIMENTAL=0`
-- Auth on：`CWEB_REQUIRE_AUTH=1`
-- 默认 loopback：`CWEB_HOST=127.0.0.1`
-- 远程访问必须有可信 HTTPS/VPN/SSH 层
-- 不把 token 写进 shell history 或日志
-- 每次升级官方 Codex 后重新执行 `npm run seal`
+1. use two disposable, separate workspaces;
+2. start a harmless turn from the other client;
+3. start a harmless turn from Official Codex App Server Web;
+4. restart/stop the Web service while the other client remains active;
+5. confirm the other client's task/process remains alive;
+6. start the Web service again and confirm it creates only its own fresh App Server child.
+
+This proves process-lifecycle isolation. It does **not** claim that two independent Codex clients can safely modify the exact same files simultaneously; ordinary filesystem/config shared-state concurrency still applies.
+
+## 5. Sealed deployment policy
+
+- `CWEB_EXPERIMENTAL=0`
+- `CWEB_REQUIRE_AUTH=1`
+- preferably `CWEB_HOST=127.0.0.1`
+- remote access only through trusted HTTPS/VPN/SSH layer
+- do not log or place `CWEB_TOKEN` in shell history
+- regenerate/verify source manifest after intentional source changes
+- rerun `npm run seal` after an official Codex upgrade
+
+## 6. CI baseline
+
+Required CI validates a fixed, known-good official Codex release for reproducibility. A separate `continue-on-error` latest-version job detects future protocol drift early without invalidating an already sealed baseline merely because upstream published a new release.

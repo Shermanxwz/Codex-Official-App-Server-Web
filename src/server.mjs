@@ -3,13 +3,14 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.mjs';
-import { CodexAppServer } from './codex-client.mjs';
+import { CodexAppServer, CodexRpcError } from './codex-client.mjs';
 import { OfficialSchemaRegistry } from './schema-registry.mjs';
 import {
   SessionStore, SlidingRateLimit, isLoopbackHost, json, parseCookies,
   readJson, safeEqualText, sameOrigin, secureHeaders,
 } from './security.mjs';
 
+const APP_VERSION = '0.2.0';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = path.join(root, 'public');
 const schemaDir = path.join(config.stateDir, config.experimental ? 'schema-experimental' : 'schema-stable');
@@ -22,6 +23,14 @@ if (config.requireAuth && !config.token) {
 if (!isLoopbackHost(config.host) && !config.requireAuth) {
   console.error('Refusing non-loopback bind while authentication is disabled.');
   process.exit(2);
+}
+if (config.publicOrigin) {
+  let parsed;
+  try { parsed = new URL(config.publicOrigin); } catch { parsed = null; }
+  if (!parsed || !['http:', 'https:'].includes(parsed.protocol) || parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) {
+    console.error('CWEB_PUBLIC_ORIGIN must be an exact http(s) origin with no path, query, fragment, or credentials.');
+    process.exit(2);
+  }
 }
 
 let registry;
@@ -42,34 +51,106 @@ const codex = new CodexAppServer({
   cwd: config.workspace,
   experimental: config.experimental,
   timeoutMs: config.rpcTimeoutMs,
+  maxPending: config.maxPendingRpc,
+  maxServerRequests: config.maxPendingRpc,
+  maxStdinBufferBytes: config.maxStdinBufferBytes,
+  maxLineBytes: config.maxJsonlLineBytes,
 });
 const sessions = new SessionStore();
 const loginRate = new SlidingRateLimit(6, 60_000);
 const sseClients = new Set();
-const recentEvents = [];
 let fatalCodexError = null;
+let restartTimer = null;
+let restartAttempt = 0;
+let eventSequence = 0;
 
-function pushEvent(type, payload) {
-  const event = { type, payload, at: Date.now() };
-  recentEvents.push(event);
-  if (recentEvents.length > 300) recentEvents.splice(0, recentEvents.length - 300);
-  const frame = `data: ${JSON.stringify(event)}\n\n`;
-  for (const res of [...sseClients]) {
-    try { res.write(frame); } catch { sseClients.delete(res); }
-  }
+function eventFrame(type, payload) {
+  const event = { type, payload, at: Date.now(), sequence: ++eventSequence };
+  const text = JSON.stringify(event);
+  if (Buffer.byteLength(text) <= config.eventMaxBytes) return { event, frame: `id: ${event.sequence}\ndata: ${text}\n\n` };
+  const compact = {
+    type: 'eventOversize',
+    payload: { originalType: type, method: payload?.method || null, bytes: Buffer.byteLength(text) },
+    at: Date.now(), sequence: event.sequence,
+  };
+  return { event: compact, frame: `id: ${compact.sequence}\ndata: ${JSON.stringify(compact)}\n\n` };
 }
 
-codex.on('message', (message) => pushEvent(message.id !== undefined ? 'serverRequest' : 'notification', message));
+function writeSse(res, frame) {
+  if (res.destroyed || res.writableEnded || res.writableLength > config.sseMaxBufferBytes) {
+    sseClients.delete(res);
+    res.destroy();
+    return false;
+  }
+  try { res.write(frame); return true; }
+  catch { sseClients.delete(res); res.destroy(); return false; }
+}
+
+function pushEvent(type, payload) {
+  const { frame } = eventFrame(type, payload);
+  for (const res of [...sseClients]) writeSse(res, frame);
+}
+
+function rejectUnknownServerRequest(message) {
+  try {
+    codex.respondError(message.id, { code: -32601, message: `Server request is not present in the loaded official schema: ${message.method}` });
+  } catch { /* child may already be gone */ }
+}
+
+codex.on('serverRequest', (message) => {
+  if (!registry.getServerRequest(message.method)) {
+    pushEvent('protocolMismatch', { direction: 'serverRequest', method: message.method });
+    rejectUnknownServerRequest(message);
+    return;
+  }
+  const bytes = Buffer.byteLength(JSON.stringify(message));
+  if (bytes > config.eventMaxBytes) {
+    try { codex.respondError(message.id, { code: -32602, message: `Server request exceeds Web client safety limit (${bytes} bytes)` }); } catch { /* ignore */ }
+    pushEvent('serverRequestRejected', { method: message.method, reason: 'too-large', bytes });
+    return;
+  }
+  pushEvent('serverRequest', message);
+});
+codex.on('notification', (message) => {
+  if (!registry.getServerNotification(message.method)) {
+    pushEvent('protocolMismatch', { direction: 'serverNotification', method: message.method });
+    return;
+  }
+  pushEvent('notification', message);
+});
 codex.on('stderr', (line) => {
   const text = String(line).trim();
   if (text) console.error(`[codex] ${text.slice(0, 4000)}`);
 });
 codex.on('protocolError', (value) => pushEvent('protocolError', value));
+codex.on('serverRequestsCleared', (value) => pushEvent('serverRequestsCleared', value));
 codex.on('exit', (value) => pushEvent('codexExit', value));
-codex.on('error', (error) => {
-  fatalCodexError = error.message;
-  pushEvent('codexError', { message: error.message });
+codex.on('ready', (initialize) => {
+  fatalCodexError = null;
+  restartAttempt = 0;
+  pushEvent('codexReady', { initialize });
 });
+codex.on('crash', (error) => {
+  fatalCodexError = error.message;
+  pushEvent('codexError', { message: error.message, code: error.code || null });
+  scheduleCodexRestart();
+});
+
+function scheduleCodexRestart() {
+  if (restartTimer) return;
+  const delay = Math.min(config.restartMaxDelayMs, 1_000 * (2 ** Math.min(restartAttempt, 5)));
+  restartAttempt += 1;
+  restartTimer = setTimeout(async () => {
+    restartTimer = null;
+    try { await codex.start(); }
+    catch (error) {
+      fatalCodexError = error.message;
+      pushEvent('codexRestartFailed', { message: error.message, attempt: restartAttempt });
+      scheduleCodexRestart();
+    }
+  }, delay);
+  restartTimer.unref();
+}
 
 function authenticated(req) {
   if (!config.requireAuth) return true;
@@ -98,7 +179,7 @@ function methodSummary(item) {
     title: item.title,
     description: item.description,
     paramsRef: item.paramsRef,
-    paramsSchema: item.paramsSchema,
+    managed: item.method === 'initialize' || item.method === 'initialized',
   };
 }
 
@@ -123,7 +204,8 @@ function serveStatic(req, res, pathname) {
   return true;
 }
 
-async function api(req, res, pathname) {
+async function api(req, res, url) {
+  const pathname = url.pathname;
   if (pathname === '/api/login' && req.method === 'POST') {
     if (!requireOrigin(req, res)) return;
     if (!loginRate.allow(clientAddress(req))) return json(res, 429, { error: 'RATE_LIMITED' });
@@ -149,13 +231,13 @@ async function api(req, res, pathname) {
   }
 
   if (pathname === '/api/meta' && req.method === 'GET') {
-    let initializeResult = null;
-    try { initializeResult = await codex.start(); } catch (error) { fatalCodexError = error.message; }
+    let initializeResult = codex.initializeResult;
+    try { initializeResult = await codex.start(); } catch (error) { fatalCodexError = error.message; scheduleCodexRestart(); }
     return json(res, 200, {
       app: 'codex-app-server-web',
-      version: '0.1.0',
+      version: APP_VERSION,
       workspace: config.workspace,
-      status: fatalCodexError ? 'degraded' : 'ready',
+      status: codex.isReady() && !fatalCodexError ? 'ready' : 'degraded',
       error: fatalCodexError,
       schema: registry.summary(),
       initializeResult,
@@ -164,6 +246,8 @@ async function api(req, res, pathname) {
         directCodexStateMutation: false,
         privateProtocol: false,
         transport: 'stdio',
+        bidirectionalSchemaGate: true,
+        codexEnvironmentSecretsStripped: true,
       },
     });
   }
@@ -177,6 +261,14 @@ async function api(req, res, pathname) {
     });
   }
 
+  if (pathname === '/api/method-schema' && req.method === 'GET') {
+    const kind = url.searchParams.get('kind') || '';
+    const method = url.searchParams.get('method') || '';
+    const schema = registry.getSchemaBundle(kind, method);
+    if (!schema) return json(res, 404, { error: 'OFFICIAL_METHOD_SCHEMA_NOT_FOUND' });
+    return json(res, 200, { kind, method, schema });
+  }
+
   if (pathname === '/api/events' && req.method === 'GET') {
     res.writeHead(200, secureHeaders({
       'Content-Type': 'text/event-stream; charset=utf-8',
@@ -184,15 +276,16 @@ async function api(req, res, pathname) {
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
     }));
-    res.write(`data: ${JSON.stringify({
-      type: 'connected',
-      payload: { pendingServerRequests: codex.pendingServerRequests(), recentEvents: recentEvents.slice(-100) },
-      at: Date.now(),
-    })}\n\n`);
+    try { res.socket?.setNoDelay?.(true); } catch { /* ignore */ }
+    const connected = eventFrame('connected', {
+      pendingServerRequests: codex.pendingServerRequests(),
+      codexReady: codex.isReady(),
+      eventSequence,
+    });
+    writeSse(res, connected.frame);
     sseClients.add(res);
     const heartbeat = setInterval(() => {
-      try { res.write(`: ping ${Date.now()}\n\n`); }
-      catch { clearInterval(heartbeat); sseClients.delete(res); }
+      if (!writeSse(res, `: ping ${Date.now()}\n\n`)) clearInterval(heartbeat);
     }, 15_000);
     req.on('close', () => { clearInterval(heartbeat); sseClients.delete(res); });
     return;
@@ -203,6 +296,7 @@ async function api(req, res, pathname) {
     const body = await readJson(req, config.bodyLimit);
     const descriptor = registry.getRequest(body.method);
     if (!descriptor) return json(res, 400, { error: 'METHOD_NOT_IN_OFFICIAL_SCHEMA', method: body.method });
+    if (body.method === 'initialize') return json(res, 400, { error: 'INITIALIZE_IS_MANAGED_BY_GATEWAY' });
     const result = await codex.request(body.method, body.params ?? {});
     return json(res, 200, { result });
   }
@@ -220,6 +314,9 @@ async function api(req, res, pathname) {
   if (pathname === '/api/respond' && req.method === 'POST') {
     if (!requireOrigin(req, res)) return;
     const body = await readJson(req, config.bodyLimit);
+    const pending = codex.pendingServerRequests().find((item) => String(item.id) === String(body.id));
+    if (!pending) return json(res, 404, { error: 'SERVER_REQUEST_NOT_PENDING' });
+    if (!registry.getServerRequest(pending.method)) return json(res, 409, { error: 'SERVER_REQUEST_NOT_IN_OFFICIAL_SCHEMA' });
     if (body.error) codex.respondError(body.id, body.error);
     else codex.respond(body.id, body.result ?? {});
     return json(res, 200, { ok: true });
@@ -228,31 +325,58 @@ async function api(req, res, pathname) {
   return json(res, 404, { error: 'NOT_FOUND' });
 }
 
+function errorStatus(error) {
+  if (Number(error.status)) return Number(error.status);
+  if (error.code === 'CODEX_RPC_TIMEOUT') return 504;
+  if (['CODEX_APP_SERVER_EXITED', 'CODEX_CLIENT_BUSY'].includes(error.code)) return 503;
+  if (error instanceof CodexRpcError) {
+    if (error.rpc?.code === -32602) return 400;
+    if (error.rpc?.code === -32001) return 503;
+    return 502;
+  }
+  return 500;
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-    if (url.pathname.startsWith('/api/')) return await api(req, res, url.pathname);
+    if (url.pathname === '/healthz') return json(res, 200, { status: 'ok' });
+    if (url.pathname === '/readyz') return json(res, codex.isReady() ? 200 : 503, { status: codex.isReady() ? 'ready' : 'not-ready' });
+    if (url.pathname.startsWith('/api/')) return await api(req, res, url);
     if (serveStatic(req, res, url.pathname)) return;
     res.writeHead(404, secureHeaders({ 'Content-Type': 'text/plain; charset=utf-8' }));
     res.end('Not found');
   } catch (error) {
     console.error(error);
-    json(res, Number(error.status) || 500, { error: error.code || 'INTERNAL_ERROR', message: error.message });
+    json(res, errorStatus(error), {
+      error: error.code || 'INTERNAL_ERROR',
+      message: error.message,
+      ...(error instanceof CodexRpcError ? { rpc: error.rpc } : {}),
+    });
   }
 });
+
+server.headersTimeout = 10_000;
+server.requestTimeout = 30_000;
+server.keepAliveTimeout = 5_000;
+server.maxHeadersCount = 64;
+server.maxRequestsPerSocket = 1_000;
 
 server.listen(config.port, config.host, async () => {
   console.log(`Codex App Server Web listening on http://${config.host}:${config.port}`);
   console.log(`Codex: ${registry.version}`);
   console.log(`Official schema: ${registry.digest.slice(0, 16)} (${registry.requests.length} requests)`);
-  try { await codex.start(); } catch (error) { console.error(`Codex App Server failed: ${error.message}`); }
+  try { await codex.start(); }
+  catch (error) { fatalCodexError = error.message; console.error(`Codex App Server failed: ${error.message}`); scheduleCodexRestart(); }
 });
 
 function shutdown(signal) {
   console.log(`Shutting down (${signal})`);
+  if (restartTimer) clearTimeout(restartTimer);
   server.close(() => process.exit(0));
   codex.close();
-  setTimeout(() => process.exit(1), 5_000).unref();
+  const force = setTimeout(() => process.exit(1), 5_000);
+  force.unref();
 }
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
