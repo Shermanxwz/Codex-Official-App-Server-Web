@@ -22,7 +22,7 @@ The gateway does not reproduce Codex business logic. It:
 - `ServerRequest`
 - `ServerNotification`
 
-JSON request alternatives provide the parameter schema used by the generic Official APIs UI. The TypeScript export provides an independent upstream method-set check. If JSON and TypeScript disagree, startup fails with `OFFICIAL_PROTOCOL_EXPORT_DRIFT` rather than guessing which export is correct.
+JSON request alternatives provide the parameter schema used by the generic Official APIs UI. The TypeScript export provides an independent upstream method-set check. JSON is the authoritative current wire schema. Every JSON wire method must be covered by the independent TypeScript export; if TypeScript is missing a JSON wire method, startup fails with `OFFICIAL_PROTOCOL_EXPORT_DRIFT`. TypeScript-only legacy/type exports are retained as diagnostics and are not admitted as current wire methods.
 
 The stable contract is therefore set-based:
 

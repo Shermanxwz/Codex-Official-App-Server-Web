@@ -7,7 +7,7 @@ A bilingual, self-hosted Web client for the **official OpenAI Codex App Server p
 ## Archive contract
 
 - **Official App Server only.** Production uses local JSONL over `stdio`.
-- **Stable protocol coverage is set-based, not hand-maintained.** At startup the installed official `codex` binary exports both JSON Schema and TypeScript protocol definitions. Their request/notification method sets must match exactly or startup fails closed.
+- **Stable protocol coverage is set-based, not hand-maintained.** At startup the installed official `codex` binary exports both JSON Schema and TypeScript protocol definitions. Every JSON wire method must also be present in the TypeScript export or startup fails closed. TypeScript-only legacy/type exports are recorded but are not treated as current invocable wire methods.
 - **100% stable wire/API method coverage.** Every stable method exported by `ClientRequest`/`ClientNotification` is implemented either as a gateway-managed lifecycle operation (`initialize` / `initialized`) or is available through the schema-gated Official APIs surface. Server requests and notifications are also checked against their official exports before reaching the browser.
 - **Native core UX.** Threads, history, resume, turns, streaming, interrupt, approvals, models and supported reasoning effort are first-class UI flows. Less common stable methods remain available through the official-schema form.
 - **Experimental is opt-in** with `CWEB_EXPERIMENTAL=1` and is outside the archive compatibility promise.
@@ -144,7 +144,7 @@ npm run seal
 ```
 
 - `manifest:verify` proves the checked-in source manifest matches the tree.
-- `seal:core` proves source invariants plus dual official-export parity against the currently installed Codex.
+- `seal:core` proves source invariants plus dual official-export coverage against the currently installed Codex.
 - `seal` additionally launches its own real official App Server on the target host and verifies `account/read`, `model/list`, `thread/list`, and `thread/loaded/list` (when exported) through official RPC. Only then does it print `ARCHIVE_READY`.
 
 See [Production Seal](docs/PRODUCTION_SEAL.md), [Architecture](ARCHITECTURE.md), [Security](SECURITY.md), and [Upstream validation](docs/UPSTREAM_VALIDATION.md).

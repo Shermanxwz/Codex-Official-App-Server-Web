@@ -24,10 +24,10 @@ npm run seal:core
 The core seal additionally proves:
 
 - the installed exact Codex version can export both stable JSON Schema and TypeScript protocol definitions;
-- their four method sets (`ClientRequest`, `ClientNotification`, `ServerRequest`, `ServerNotification`) agree exactly;
+- for all four protocol directions, every JSON wire method is covered by the TypeScript export; TypeScript-only legacy/type exports are recorded but do not expand the wire allow-list;
 - required core stable methods are present;
 - stable server-request coverage is non-empty;
-- exact Codex version, dual-export digest, source digest and method counts are recorded.
+- exact Codex version, dual-export digest and JSON→TypeScript coverage, source digest and method counts are recorded.
 
 The script prints:
 

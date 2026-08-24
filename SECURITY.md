@@ -22,7 +22,7 @@ The reverse direction is also gated: a server request or notification that is no
 
 ## Dual-export fail-closed rule
 
-The gateway generates both official JSON Schema and TypeScript exports. Their method sets must match. A mismatch is treated as an upstream protocol export drift and blocks startup rather than choosing one representation silently.
+The gateway generates both official JSON Schema and TypeScript exports. Every JSON wire method must also exist in the TypeScript export. If TypeScript is missing a JSON wire method, startup fails closed. TypeScript-only legacy/type exports are recorded as diagnostics but are not exposed as current wire methods.
 
 ## Secret isolation
 

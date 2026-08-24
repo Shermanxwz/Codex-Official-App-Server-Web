@@ -9,9 +9,9 @@ The production default is the stable official Codex App Server protocol. On star
 - JSON Schema exports (`generate-json-schema`), and
 - TypeScript exports (`generate-ts`).
 
-The four bidirectional method sets (`ClientRequest`, `ClientNotification`, `ServerRequest`, `ServerNotification`) must agree between the two independent official exports. A mismatch fails closed with `OFFICIAL_PROTOCOL_EXPORT_DRIFT`.
+For all four protocol directions, the JSON Schema is the authoritative current wire method set. Every JSON wire method must also be present in the independent TypeScript export; a missing TypeScript counterpart fails closed with `OFFICIAL_PROTOCOL_EXPORT_DRIFT`. TypeScript-only legacy/type exports are recorded for diagnostics but do not enlarge the browser wire allow-list.
 
-Every stable client method in that agreed method set is represented by the Web protocol surface. `initialize` and `initialized` are counted as implemented but are gateway-managed lifecycle messages; the browser cannot send a second handshake.
+Every stable client method in the authoritative JSON wire set is represented by the Web protocol surface. `initialize` and `initialized` are counted as implemented but are gateway-managed lifecycle messages; the browser cannot send a second handshake.
 
 The JSON parameter schema is exposed on demand for the generic Official APIs surface. The gateway intentionally does not pretend to be a second implementation of Codex parameter semantics: raw parameters are ultimately validated by the official App Server. This also means an upstream JSON-schema field omission does not force the gateway to strip an otherwise valid field supplied in raw JSON.
 

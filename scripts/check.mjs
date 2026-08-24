@@ -65,7 +65,7 @@ for(const needle of ['maxSessions = 256','maxKeys = 4096']) {
 }
 
 const schema=fs.readFileSync(path.join(root,'src/schema-registry.mjs'),'utf8');
-for(const needle of ['generate-json-schema','generate-ts','OFFICIAL_PROTOCOL_EXPORT_DRIFT','_cweb-schema-manifest.json','assertSameMethodSet']) {
+for(const needle of ['generate-json-schema','generate-ts','OFFICIAL_PROTOCOL_EXPORT_DRIFT','_cweb-schema-manifest.json','assertJsonWireCoveredByTypeScript']) {
   if(!schema.includes(needle)) failures.push(`dual official protocol contract missing: ${needle}`);
 }
 

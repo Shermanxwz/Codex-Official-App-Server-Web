@@ -30,7 +30,7 @@ The architecture was checked against official App Server behavior/schema layout:
 
 ## Runtime authority
 
-A deployed instance does **not** trust this documentation snapshot to admit RPCs. The locally installed official Codex executable remains authoritative: the gateway generates its JSON and TypeScript exports, requires method-set parity, records exact version/digest, then gates traffic against those artifacts.
+A deployed instance does **not** trust this documentation snapshot to admit RPCs. The locally installed official Codex executable remains authoritative: the gateway generates its JSON and TypeScript exports, requires JSON wire methods to be covered by the TypeScript export while recording TypeScript-only legacy/type exports, records exact version/digest, then gates traffic against those artifacts.
 
 A future official release can therefore produce one of three outcomes:
 
