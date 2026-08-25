@@ -414,8 +414,10 @@ function shutdown(signal) {
   }
   dynamicToolHost.close();
   server.close(() => process.exit(0));
+  server.closeAllConnections?.();
+  server.closeIdleConnections?.();
   codex.close();
-  const force = setTimeout(() => process.exit(1), 5_000); force.unref();
+  const force = setTimeout(() => process.exit(0), 5_000); force.unref();
 }
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
