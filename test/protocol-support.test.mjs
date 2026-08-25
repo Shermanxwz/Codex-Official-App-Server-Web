@@ -20,11 +20,14 @@ test('archive support registry covers every current first-class Codex item dispo
 test('composer keeps workspace selection in the primary new-thread flow and supports official image input', () => {
   const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
   const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'public/styles.css'), 'utf8');
+  const protocol = fs.readFileSync(path.join(root, 'public/protocol-support.js'), 'utf8');
   assert.doesNotMatch(html, /id="workspaceButton"/);
   assert.match(html, /id="attachButton"/);
   assert.match(html, /id="attachmentInput"[^>]+accept="image\//);
   assert.doesNotMatch(html, /id="capabilitiesButton"/);
-  assert.match(html, /id="imagePasteHint"/);
+  assert.doesNotMatch(html, /id="imagePasteHint"/);
+  assert.doesNotMatch(html, /id="composerHint"/);
   assert.match(html, /id="capabilityCards"/);
   assert.match(app, /type:'image',url:/);
   assert.match(app, /function handleClipboardPaste/);
@@ -51,6 +54,10 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /tokenUsageThreadId/);
   assert.match(app, /function createWorkGroup/);
   assert.match(app, /function showContextCompaction/);
+  assert.match(app, /function preserveLiveTimeline/);
+  assert.match(protocol, /turn\/diff\/updated/);
+  assert.match(app, /kind==='ignore'/);
+  assert.match(css, /grid-template-columns:minmax\(0,1fr\) auto/);
 });
 
 test('all declared ServerRequest methods have one explicit trust/UI disposition', () => {

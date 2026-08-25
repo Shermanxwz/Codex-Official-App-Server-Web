@@ -33,6 +33,8 @@ export const TIMELINE_DELTA_NOTIFICATIONS = Object.freeze({
   'item/reasoning/summaryTextDelta': 'reasoning',
   'item/reasoning/textDelta': 'reasoning',
   'item/mcpToolCall/progress': 'tool-progress',
+  'turn/diff/updated': 'ignore',
+  'turn/plan/updated': 'ignore',
 });
 
 export function serverRequestSupport(method) { return SERVER_REQUEST_SUPPORT[String(method || '')] || 'unknown'; }

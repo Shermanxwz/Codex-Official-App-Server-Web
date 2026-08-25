@@ -152,3 +152,55 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
 .context-usage.unknown .context-usage-fill{background:var(--faint)}
 @media(max-width:980px){.context-usage{max-width:240px}.context-usage-summary-text{display:none}}
 @media(max-width:760px){.context-usage-panel{right:-6px}.context-usage>summary{padding-inline:6px}}
+
+/* Mobile acceptance: keep every column inside the viewport and let the composer shrink safely. */
+.timeline,.turn-block,.item,.message,.message-body,.rich-text,.activity-card,.work-group,.work-group-items{min-width:0;max-width:100%}
+.message-body,.rich-text,.activity-copy,.activity-title,.activity-head,.activity-subtitle{overflow-wrap:anywhere}
+@media(max-width:760px){
+  .main{min-width:0}
+  .topbar{min-height:54px;padding:7px 8px}
+  .topbar-left{flex:1;min-width:0;gap:5px}
+  .thread-heading{min-width:0;max-width:100%}
+  .thread-heading h1{max-width:calc(100vw - 132px);font-size:12px}
+  .thread-subline{max-width:calc(100vw - 100px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .thread-subline .sep,.workspace-header{display:none}
+  .top-actions{flex:0 0 auto;gap:2px}
+  .stop-button{padding-inline:8px;font-size:10px}
+  .connection-banner{width:calc(100% - 16px);margin-top:6px;font-size:10px}
+  .timeline{overflow-x:hidden;padding:12px 9px 28px}
+  .message{font-size:13px}
+  .message.user .message-bubble{max-width:92%;padding:8px 10px}
+  .message.agent .message-body{width:auto;padding-inline:2px}
+  .activity-head{max-width:100%;padding-inline:6px}
+  .activity-copy{max-width:calc(100% - 28px)}
+  .activity-subtitle{max-width:100%}
+  .work-group-items{margin-left:14px;padding-left:6px}
+  .composer-wrap{padding-inline:8px;padding-bottom:max(8px,env(safe-area-inset-bottom))}
+  .composer-card{padding:8px 8px 7px;border-radius:14px}
+  .composer-card textarea{min-height:36px;max-height:128px;font-size:16px}
+  .composer-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:6px}
+  .composer-left{min-width:0;flex:1 1 auto;overflow-x:auto;scrollbar-width:none}
+  .composer-left::-webkit-scrollbar{display:none}
+  .composer-right{min-width:0;flex:0 0 auto;gap:4px}
+  .attach-button{flex:0 0 auto;max-width:112px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pill-select{min-width:0;max-width:92px;padding-inline:7px 19px;overflow:hidden;text-overflow:ellipsis}
+  #modelSelect{max-width:100px}
+  #effortSelect{max-width:78px}
+  .composer-mode{max-width:66px;overflow:hidden;text-overflow:ellipsis}
+  .context-usage{max-width:none}
+  .context-usage>summary{min-width:32px;justify-content:center;padding-inline:5px;gap:2px}
+  #contextUsageLabel{display:none}
+  .context-usage-panel{right:0;bottom:calc(100% + 8px);width:min(280px,calc(100vw - 24px))}
+  .composer-sync-status{display:none}
+  .send-button{width:32px;height:32px;flex:0 0 auto}
+  .jump-bottom{bottom:96px}
+  .approval-tray{right:8px;bottom:96px;width:calc(100% - 16px)}
+  .drawer-head{padding:11px 12px}
+  .method-detail{padding:12px}
+}
+@media(max-width:380px){
+  .attach-button{max-width:82px}
+  #modelSelect{max-width:76px}
+  #effortSelect{max-width:66px}
+  .composer-mode{max-width:54px;font-size:8px}
+}
