@@ -56,7 +56,10 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /function showContextCompaction/);
   assert.match(app, /function preserveLiveTimeline/);
   assert.match(app, /function removeIgnoredProtocolEvents/);
-  assert.match(app, /m==='turn\/diff\/updated'\|\|m==='turn\/plan\/updated'/);
+  assert.match(app, /m==='turn\/diff\/updated'/);
+  assert.match(app, /m==='turn\/plan\/updated'/);
+  assert.match(app, /function upsertOfficialPlan/);
+  assert.match(app, /officialSource/);
   assert.match(app, /else if\(r\.method==='item\/tool\/call'\)\{if\(state\.meta\?\.capabilities\?\.dynamicToolHost\?\.enabled===true\)/);
   assert.match(app, /LAST_THREAD_KEY/);
   assert.match(app, /function restoreLastThread/);

@@ -46,6 +46,7 @@ export class CodexAppServer extends EventEmitter {
     this.closed = false;
     this.initializeResult = null;
     this.generation = 0;
+    this.protocolTerminationGeneration = null;
     this.stdoutBuffer = Buffer.alloc(0);
   }
 
@@ -92,6 +93,12 @@ export class CodexAppServer extends EventEmitter {
       this.#failAll(error);
       this.emit('transportError', { error, generation });
     };
+    const terminateForProtocolError = (error) => {
+      if (this.child !== child || generation !== this.generation || this.protocolTerminationGeneration === generation) return;
+      this.protocolTerminationGeneration = generation;
+      this.emit('protocolError', { message: error.message });
+      child.kill('SIGTERM');
+    };
     child.stdout.on('data', (chunk) => this.#onStdoutChunk(child, generation, chunk));
     child.stderr.on('data', (chunk) => { if (this.child === child) this.emit('stderr', chunk.toString()); });
     child.stdin.on('error', failTransport);
@@ -109,6 +116,12 @@ export class CodexAppServer extends EventEmitter {
       this.emit('ready', result);
       return result;
     } catch (error) {
+      this.emit('startError', {
+        error,
+        generation,
+        pid: child.pid,
+        pendingMethods: [...this.pending.values()].map((pending) => pending.method),
+      });
       if (this.child === child && !child.killed) child.kill('SIGTERM');
       throw error;
     }
@@ -120,8 +133,7 @@ export class CodexAppServer extends EventEmitter {
     if (this.stdoutBuffer.length > this.maxLineBytes && this.stdoutBuffer.indexOf(0x0a) === -1) {
       const error = new Error(`Codex App Server emitted a JSONL line larger than ${this.maxLineBytes} bytes`);
       error.code = 'CODEX_PROTOCOL_LINE_TOO_LARGE';
-      this.emit('protocolError', { message: error.message });
-      child.kill('SIGTERM');
+      terminateForProtocolError(error);
       return;
     }
     for (;;) {
@@ -133,8 +145,7 @@ export class CodexAppServer extends EventEmitter {
       if (line.length > this.maxLineBytes) {
         const error = new Error(`Codex App Server emitted a JSONL line larger than ${this.maxLineBytes} bytes`);
         error.code = 'CODEX_PROTOCOL_LINE_TOO_LARGE';
-        this.emit('protocolError', { message: error.message });
-        child.kill('SIGTERM');
+        terminateForProtocolError(error);
         return;
       }
       this.#onLine(line.toString('utf8'));
@@ -257,13 +268,24 @@ export class CodexAppServer extends EventEmitter {
     if (this.child !== child || generation !== this.generation) return;
     const error = new Error(`Codex App Server exited (${code ?? signal ?? 'unknown'})`);
     error.code = 'CODEX_APP_SERVER_EXITED';
+    const pendingMethods = [...this.pending.values()].map((pending) => pending.method);
+    const exit = {
+      code,
+      signal,
+      generation,
+      pid: child.pid,
+      killed: child.killed,
+      exitCode: child.exitCode,
+      signalCode: child.signalCode,
+      pendingMethods,
+    };
     this.child = null;
     this.ready = null;
     this.initializeResult = null;
     this.stdoutBuffer = Buffer.alloc(0);
     this.#failAll(error);
     this.#clearServerRequests(error);
-    this.emit('exit', { code, signal, generation });
+    this.emit('exit', exit);
     if (!this.closed) this.emit('crash', error);
   }
 

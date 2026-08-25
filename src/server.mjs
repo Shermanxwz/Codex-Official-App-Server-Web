@@ -228,7 +228,13 @@ codex.on('stderr', (line) => { const text = String(line).trim(); if (text) conso
 codex.on('protocolError', (value) => pushEvent('protocolError', value));
 codex.on('transportError', ({ error }) => console.error(`[codex] transport error: ${error?.code || 'unknown'} ${error?.message || error}`));
 codex.on('serverRequestsCleared', (value) => pushEvent('serverRequestsCleared', value));
-codex.on('exit', (value) => pushEvent('codexExit', value));
+codex.on('startError', ({ error, generation, pid, pendingMethods }) => {
+  console.error(`[codex] start failed pid=${pid ?? 'unknown'} generation=${generation} code=${error?.code || 'unknown'} pending=${(pendingMethods || []).join(',') || 'none'}: ${error?.message || error}`);
+});
+codex.on('exit', (value) => {
+  console.error(`[codex] child exited pid=${value.pid ?? 'unknown'} code=${value.code ?? 'null'} signal=${value.signal ?? 'null'} killed=${value.killed ? 'yes' : 'no'} pending=${(value.pendingMethods || []).join(',') || 'none'}`);
+  pushEvent('codexExit', value);
+});
 codex.on('ready', (initialize) => { fatalCodexError = null; restartAttempt = 0; pushEvent('codexReady', { initialize }); });
 codex.on('crash', (error) => { fatalCodexError = error.message; pushEvent('codexError', { message: error.message, code: error.code || null }); scheduleCodexRestart(); });
 
@@ -347,7 +353,9 @@ async function api(req, res, url) {
     if (!descriptor) return json(res, 400, { error: 'METHOD_NOT_IN_OFFICIAL_SCHEMA', method: body.method });
     if (body.method === 'initialize') return json(res, 400, { error: 'INITIALIZE_IS_MANAGED_BY_GATEWAY' });
     if (!accessAllows(body.method)) return json(res, 403, { error: 'METHOD_BLOCKED_BY_ACCESS_PROFILE', method: body.method, profile: config.accessProfile });
-    const result = await codex.request(body.method, managedParams(body.method, body.params ?? {}));
+    let result;
+    try { result = await codex.request(body.method, managedParams(body.method, body.params ?? {})); }
+    catch (error) { error.requestMethod = body.method; throw error; }
     return json(res, 200, { result });
   }
   if (pathname === '/api/notify' && req.method === 'POST') {
@@ -403,7 +411,8 @@ const server = http.createServer(async (req, res) => {
   } catch (error) {
     const rpcError = compactRpcError(error);
     const publicMessage = rpcError?.message || String(error.message || '').replace(/\s+/g, ' ').slice(0, 1200);
-    console.error(`[request] ${error.code || (rpcError ? 'CODEX_RPC_ERROR' : 'INTERNAL_ERROR')}: ${publicMessage}`);
+    const requestContext = error.requestMethod ? ` method=${error.requestMethod}` : '';
+    console.error(`[request]${requestContext} ${error.code || (rpcError ? 'CODEX_RPC_ERROR' : 'INTERNAL_ERROR')}: ${publicMessage}`);
     json(res, errorStatus(error), { error: error.code || (rpcError ? 'CODEX_RPC_ERROR' : 'INTERNAL_ERROR'), message: publicMessage, ...(rpcError ? { rpc: rpcError } : {}) });
   }
 });
