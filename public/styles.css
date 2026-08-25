@@ -247,3 +247,31 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
 @media(max-width:380px){
   .top-actions #openProtocolTop{display:none}
 }
+
+/* The mobile browser may report a CSS viewport wider than the physical
+   screenshot. Use the composer itself as the responsive boundary so the
+   running-only controls cannot push the card off-screen after a send. */
+.composer-card{width:100%;min-width:0;container-type:inline-size}
+.composer-toolbar,.composer-left,.composer-right{min-width:0}
+.composer-left>*,.composer-right>*.send-button{flex:0 0 auto}
+.attach-button{writing-mode:horizontal-tb;white-space:nowrap!important;word-break:keep-all;line-height:1.2}
+.context-usage{min-width:0;width:auto;max-width:100%;flex:0 1 auto}
+.context-usage>summary{min-width:0;overflow:hidden}
+.context-usage-percent,.context-usage-summary-text{min-width:0}
+
+@container (max-width:720px){
+  .composer-toolbar{display:grid;grid-template-columns:minmax(0,1fr);align-items:stretch;gap:6px}
+  .composer-left{width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden;flex-wrap:nowrap;scrollbar-width:none}
+  .composer-left::-webkit-scrollbar{display:none}
+  .composer-right{width:100%;max-width:100%;justify-content:flex-end;flex-wrap:nowrap}
+  .composer-mode{min-width:0;max-width:42%;overflow:hidden;text-overflow:ellipsis}
+  .context-usage{max-width:42%}
+}
+
+@container (max-width:420px){
+  .composer-left{gap:4px}
+  .attach-button{max-width:96px}
+  #modelSelect{max-width:120px}
+  #effortSelect{max-width:88px}
+  .composer-right{gap:4px}
+}

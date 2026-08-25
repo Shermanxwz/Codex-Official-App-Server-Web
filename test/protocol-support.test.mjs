@@ -77,6 +77,11 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /kind==='ignore'/);
   assert.match(css, /grid-template-columns:minmax\(0,1fr\) auto/);
   assert.match(css, /@media\(max-width:480px\)\{\s*\.composer-toolbar\{grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(css, /container-type:inline-size/);
+  assert.match(css, /@container \(max-width:720px\)/);
+  assert.match(css, /\.attach-button\{writing-mode:horizontal-tb;white-space:nowrap!important/);
+  assert.match(app, /const incomingIds=new Set/);
+  assert.match(app, /pending=visibleBlocks\.some/);
   assert.match(css, /\.topbar\{min-width:0;max-width:100%;overflow:hidden\}/);
   assert.match(css, /\.top-actions #openProtocolTop\{display:none\}/);
   assert.match(css, /\.approval-card-head/);
