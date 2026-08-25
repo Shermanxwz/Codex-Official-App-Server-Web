@@ -45,7 +45,9 @@ Host 页面
 
 ## Web 产品能力
 
-原生界面包括历史/read/resume、实时 Turn/Item、流式 delta、模型与 reasoning、interrupt、命令/文件/权限审批、用户输入、MCP elicitation、断线权威重同步，以及 MCP App 渲染。其余不常用官方方法仍可在 **官方接口** Drawer 中按当前官方 schema 直接调用。
+原生界面包括历史/read/resume、实时 Turn/Item、流式 delta、模型与 reasoning、interrupt、命令/文件/权限审批、用户输入、MCP elicitation、断线权威重同步，以及 MCP App 渲染。执行项会像 Codex 一样收进默认折叠的“工作过程”，主回答保持在对话主线上；活动 Turn 中继续输入会走官方 `turn/steer` 调整方向，手动上下文整理走官方 `thread/compact/start`，并显示压缩动画。其余不常用官方方法仍可在 **官方接口** Drawer 中按当前官方 schema 直接调用。
+
+网关不把聊天历史、模型输出或运行日志复制到项目目录；持久会话数据仍由官方 Codex Runtime 管理。项目只维护官方 schema 缓存，启动时会自动删除自己生成且已过期的 schema 交换 `.tmp/.bak` 临时物；`scripts/prune-state.mjs` 可手动执行同一清理。它不会自动删除 `~/.codex` 中的官方会话历史，避免误删用户数据。
 
 ## 环境要求
 

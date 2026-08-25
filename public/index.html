@@ -68,6 +68,7 @@
             <div class="thread-subline">
               <span id="connectionDot" class="connection-dot"></span>
               <span id="statusLine">—</span>
+              <span id="contextIndicator" class="context-indicator hidden" role="status"></span>
               <span class="sep">·</span>
               <span id="workspaceHeader" class="workspace-header">—</span>
             </div>
@@ -75,6 +76,7 @@
         </div>
         <div class="top-actions">
           <button id="reloadThread" class="icon-button" type="button" data-i18n-title="reload" title="刷新">↻</button>
+          <button id="compactThread" class="icon-button hidden" type="button" data-i18n-title="contextCompact" title="压缩上下文" aria-label="压缩上下文">≋</button>
           <button id="interrupt" class="stop-button hidden" type="button" data-i18n="stop">停止</button>
           <button id="openProtocolTop" class="icon-button" type="button" title="Official APIs">•••</button>
         </div>
@@ -111,6 +113,7 @@
               <select id="effortSelect" class="pill-select" data-i18n-title="reasoning" title="推理强度" aria-label="推理强度"></select>
             </div>
             <div class="composer-right">
+              <span id="composerMode" class="composer-mode hidden"></span>
               <span id="composerHint" class="composer-hint" data-i18n="sendHint">Enter 发送 · Shift+Enter 换行</span>
               <span id="imagePasteHint" class="composer-hint composer-hint-secondary" data-i18n="pasteImageHint">Ctrl+V 粘贴图片</span>
               <span id="configSyncStatus" class="composer-sync-status" data-i18n="configSynced">已与 Codex 同步</span>

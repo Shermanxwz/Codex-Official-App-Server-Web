@@ -15,7 +15,8 @@
     "seal:core": "node scripts/seal-core.mjs && node scripts/protocol-seal.mjs",
     "seal:protocol": "node scripts/protocol-seal.mjs",
     "manifest": "node scripts/source-manifest.mjs",
-    "manifest:verify": "node scripts/source-manifest.mjs --verify"
+    "manifest:verify": "node scripts/source-manifest.mjs --verify",
+    "maintenance:prune": "node scripts/prune-state.mjs"
   },
   "license": "MIT"
 }

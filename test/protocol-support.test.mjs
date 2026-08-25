@@ -36,6 +36,14 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /config\/read/);
   assert.match(app, /config\/batchWrite/);
   assert.match(app, /model_reasoning_effort/);
+  assert.match(html, /id="composerMode"/);
+  assert.match(html, /id="contextIndicator"/);
+  assert.match(html, /id="compactThread"/);
+  assert.match(app, /turn\/steer/);
+  assert.match(app, /thread\/compact\/start/);
+  assert.match(app, /thread\/compacted/);
+  assert.match(app, /function createWorkGroup/);
+  assert.match(app, /function showContextCompaction/);
 });
 
 test('all declared ServerRequest methods have one explicit trust/UI disposition', () => {

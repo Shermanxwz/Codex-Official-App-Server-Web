@@ -45,7 +45,9 @@ Host page
 
 ## Normal Web UX
 
-The first-class UI includes thread history/read/resume, live turns and items, streaming deltas, model/reasoning controls, official image attachments (`turn/start` `image` inputs), interrupt, command/file/permission approvals, user-input and MCP elicitation forms, reconnect/resync, and MCP App rendering. The **Capabilities** summary reads the official MCP, Skills, Plugin, and installed App inventories; less common official methods remain callable through the generated **Official APIs** drawer with human labels and collapsed technical payloads.
+The first-class UI includes thread history/read/resume, live turns and items, streaming deltas, model/reasoning controls, official image attachments (`turn/start` `image` inputs), interrupt, live direction changes through official `turn/steer`, command/file/permission approvals, user-input and MCP elicitation forms, reconnect/resync, context-compaction animation, and MCP App rendering. Execution items are grouped into a compact, collapsed work-process track so the assistant answer stays primary. The **Capabilities** summary reads the official MCP, Skills, Plugin, and installed App inventories; less common official methods remain callable through the generated **Official APIs** drawer with human labels and collapsed technical payloads.
+
+The gateway does not copy conversation history, model output, or runtime logs into the project directory. Official Codex Runtime owns persistent conversation data. The gateway only owns its official schema cache and automatically removes stale `.tmp`/`.bak` schema-swap artifacts that it created after an interrupted startup; `scripts/prune-state.mjs` runs the same bounded cleanup manually. It never deletes the official `~/.codex` conversation history automatically.
 
 ## Requirements
 

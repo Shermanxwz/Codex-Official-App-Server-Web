@@ -54,4 +54,12 @@ test('full HTTP gateway admits only methods exported by official schema', async(
   const ok=await fetch(`${url}/api/rpc`,{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'thread/list',params:{limit:1}})}); assert.equal(ok.status,200); const body=await ok.json(); assert.equal(body.result.data[0].id,'thread-1');
   const bad=await fetch(`${url}/api/rpc`,{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'private/unknown',params:{}})}); assert.equal(bad.status,400); assert.equal((await bad.json()).error,'METHOD_NOT_IN_OFFICIAL_SCHEMA');
   const csrf=await fetch(`${url}/api/rpc`,{method:'POST',headers:{'content-type':'text/plain',origin,cookie},body:'{}'}); assert.equal(csrf.status,415);
+  const events=await fetch(`${url}/api/events`,{headers:{cookie}}); assert.equal(events.status,200);
+  const exited=await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(new Error(`server did not shut down cleanly\n${logs}`)),7_000);
+    child.once('exit',(code,signal)=>{clearTimeout(timer); resolve({code,signal});});
+    child.kill('SIGTERM');
+  });
+  await events.body?.cancel();
+  assert.equal(exited.code,0,logs);
 });

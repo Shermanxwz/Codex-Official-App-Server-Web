@@ -6,6 +6,7 @@ import { config } from './config.mjs';
 import { CodexAppServer, CodexRpcError } from './codex-client.mjs';
 import { DynamicToolHost } from './dynamic-tool-host.mjs';
 import { OfficialSchemaRegistry } from './schema-registry.mjs';
+import { pruneStateArtifacts } from './state-maintenance.mjs';
 import {
   SessionStore, SlidingRateLimit, isLoopbackHost, json, parseCookies,
   readJson, safeEqualText, sameOrigin, secureHeaders,
@@ -18,6 +19,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = path.join(root, 'public');
 const schemaDir = path.join(config.stateDir, config.experimental ? 'schema-experimental' : 'schema-stable');
 fs.mkdirSync(config.stateDir, { recursive: true, mode: 0o700 });
+const stateMaintenance = pruneStateArtifacts(config.stateDir);
+if (stateMaintenance.removed.length) console.log(`Removed ${stateMaintenance.removed.length} stale schema swap artifact(s)`);
 
 if (config.requireAuth && !config.token) {
   console.error('CWEB_TOKEN is required when CWEB_REQUIRE_AUTH=1. Run scripts/install-linux.sh or set a strong token.');
@@ -405,6 +408,10 @@ server.listen(config.port, config.host, async () => {
 function shutdown(signal) {
   console.log(`Shutting down (${signal})`);
   if (restartTimer) clearTimeout(restartTimer);
+  for (const res of [...sseClients]) {
+    sseClients.delete(res);
+    try { res.end(); } catch { try { res.destroy(); } catch { /* ignore */ } }
+  }
   dynamicToolHost.close();
   server.close(() => process.exit(0));
   codex.close();

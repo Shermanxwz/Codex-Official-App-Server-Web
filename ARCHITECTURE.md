@@ -33,7 +33,9 @@ At startup `OfficialSchemaRegistry` runs the installed Codex binary's `app-serve
 
 ## Browser event model
 
-The gateway converts official server notifications and non-host-managed ServerRequests into bounded SSE events. The browser keeps live item state keyed by official item id and re-reads authoritative thread state after reconnect rather than replaying uncertain writes.
+The gateway converts official server notifications and non-host-managed ServerRequests into bounded SSE events. The browser keeps live item state keyed by official item id and re-reads authoritative thread state after reconnect rather than replaying uncertain writes. The UI groups non-message items into a compact work-process disclosure, routes an input during an active turn through official `turn/steer`, and surfaces official `thread/compacted` / `thread/compact/start` state without inventing a private conversation protocol.
+
+The gateway writes no append-only conversation or runtime log files. Its only runtime-owned persistent data is the generated official schema cache; startup maintenance removes only stale, exact-name `.tmp`/`.bak` swap artifacts from that cache. Official Codex session/history storage remains owned by the official runtime and is intentionally not pruned by this project.
 
 ## MCP Apps
 
