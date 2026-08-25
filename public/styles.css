@@ -295,3 +295,9 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
   .official-plan.open .official-plan-details{display:block}
   .official-plan.open{z-index:8}
 }
+
+/* A cold history read can take several seconds for very large official
+   threads. Keep the selected view responsive while that read is in flight. */
+.history-loading{display:flex;align-items:center;justify-content:center;min-height:180px;color:var(--muted);font-size:12px}
+.history-loading::before{content:'';width:13px;height:13px;margin-right:8px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:history-loading-spin .8s linear infinite}
+@keyframes history-loading-spin{to{transform:rotate(360deg)}}

@@ -56,6 +56,13 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /function showContextCompaction/);
   assert.match(app, /function preserveLiveTimeline/);
   assert.match(app, /function removeIgnoredProtocolEvents/);
+  assert.match(app, /threadCache:new Map/);
+  assert.match(app, /function cachedThreadResponse/);
+  assert.match(app, /function renderHistoryBatches/);
+  assert.match(app, /function showThreadLoading/);
+  assert.match(app, /function renderPendingWorkItems/);
+  assert.match(app, /String\(id\)===String\(state\.currentThread\.id\)/);
+  assert.match(app, /requestIdleCallback/);
   assert.match(app, /function readThreadForUi/);
   assert.match(app, /thread\/turns\/list/);
   assert.match(app, /itemsView:'full'/);
