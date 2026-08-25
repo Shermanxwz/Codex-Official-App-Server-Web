@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#f7f7f5">
   <title>Codex Web</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -147,20 +148,33 @@
         <div id="methodList" class="method-list"></div>
         <div class="method-detail">
           <div class="method-title-row">
-            <h3 id="methodName">—</h3>
+            <div class="method-heading-copy">
+              <span id="methodGroup" class="method-group">—</span>
+              <h3 id="methodHumanTitle">—</h3>
+              <span id="methodSupport" class="method-support"></span>
+            </div>
             <span id="methodRisk" class="risk-badge"></span>
           </div>
           <p id="methodDescription" class="muted"></p>
-          <details>
+          <details id="methodTechnicalDetails" class="technical-details">
+            <summary data-i18n="technicalIdentity">技术标识</summary>
+            <code id="methodName" class="method-technical-code">—</code>
+          </details>
+          <details id="methodSchemaDetails" class="technical-details">
             <summary data-i18n="schema">参数 Schema</summary>
             <pre id="methodSchema"></pre>
           </details>
-          <label for="methodParams" data-i18n="params">参数 JSON</label>
-          <textarea id="methodParams" rows="12">{}</textarea>
+          <details id="methodParamsDetails" class="technical-details">
+            <summary data-i18n="parameters">查看/编辑参数 JSON</summary>
+            <textarea id="methodParams" rows="12">{}</textarea>
+          </details>
           <div class="method-actions">
             <button id="invokeMethod" class="primary-button" type="button" data-i18n="invoke">调用</button>
           </div>
-          <pre id="methodResult" class="result"></pre>
+          <details id="methodResultDetails" class="technical-details">
+            <summary data-i18n="result">查看返回结果</summary>
+            <pre id="methodResult" class="result"></pre>
+          </details>
         </div>
       </div>
     </aside>
