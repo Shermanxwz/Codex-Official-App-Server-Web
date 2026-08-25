@@ -55,9 +55,13 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /function createWorkGroup/);
   assert.match(app, /function showContextCompaction/);
   assert.match(app, /function preserveLiveTimeline/);
+  assert.match(app, /LAST_THREAD_KEY/);
+  assert.match(app, /function restoreLastThread/);
+  assert.match(app, /await restoreLastThread\(\)/);
   assert.match(protocol, /turn\/diff\/updated/);
   assert.match(app, /kind==='ignore'/);
   assert.match(css, /grid-template-columns:minmax\(0,1fr\) auto/);
+  assert.match(css, /@media\(max-width:480px\)\{\s*\.composer-toolbar\{grid-template-columns:minmax\(0,1fr\)/);
 });
 
 test('all declared ServerRequest methods have one explicit trust/UI disposition', () => {
