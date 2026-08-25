@@ -56,6 +56,13 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /function showContextCompaction/);
   assert.match(app, /function preserveLiveTimeline/);
   assert.match(app, /function removeIgnoredProtocolEvents/);
+  assert.match(app, /function readThreadForUi/);
+  assert.match(app, /thread\/turns\/list/);
+  assert.match(app, /itemsView:'full'/);
+  assert.match(app, /function approvalInfo/);
+  assert.match(app, /approvalCommandTitle/);
+  assert.match(app, /approvalTechnical/);
+  assert.match(app, /function syncContextCompactionLifecycle/);
   assert.match(app, /m==='turn\/diff\/updated'/);
   assert.match(app, /m==='turn\/plan\/updated'/);
   assert.match(app, /function upsertOfficialPlan/);
@@ -72,6 +79,8 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(css, /@media\(max-width:480px\)\{\s*\.composer-toolbar\{grid-template-columns:minmax\(0,1fr\)/);
   assert.match(css, /\.topbar\{min-width:0;max-width:100%;overflow:hidden\}/);
   assert.match(css, /\.top-actions #openProtocolTop\{display:none\}/);
+  assert.match(css, /\.approval-card-head/);
+  assert.match(css, /\.approval-technical/);
 });
 
 test('all declared ServerRequest methods have one explicit trust/UI disposition', () => {
