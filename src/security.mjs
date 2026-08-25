@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 export function secureHeaders(extra = {}) {
   return {
     'Cache-Control': 'no-store',
-    'Content-Security-Policy': "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    'Content-Security-Policy': "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-src data:; frame-ancestors 'none'; object-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'self'",
     'Cross-Origin-Opener-Policy': 'same-origin',
     'Cross-Origin-Resource-Policy': 'same-origin',
     'Referrer-Policy': 'no-referrer',
@@ -43,9 +43,8 @@ export async function readJson(req, limit) {
     chunks.push(chunk);
   }
   if (!chunks.length) return {};
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  } catch {
+  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+  catch {
     const error = new Error('Invalid JSON');
     error.status = 400;
     throw error;
@@ -78,9 +77,7 @@ export function safeEqualText(a, b) {
   return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
-export function randomToken(bytes = 32) {
-  return crypto.randomBytes(bytes).toString('base64url');
-}
+export function randomToken(bytes = 32) { return crypto.randomBytes(bytes).toString('base64url'); }
 
 export function isLoopbackHost(host) {
   const value = String(host).toLowerCase().replace(/^\[|\]$/g, '');
@@ -135,10 +132,7 @@ export class SlidingRateLimit {
     const now = Date.now();
     if (!this.entries.has(key) && this.entries.size >= this.maxKeys) this.#pruneKeys(now);
     const list = (this.entries.get(key) || []).filter((x) => x > now - this.windowMs);
-    if (list.length >= this.max) {
-      this.entries.set(key, list);
-      return false;
-    }
+    if (list.length >= this.max) { this.entries.set(key, list); return false; }
     list.push(now);
     this.entries.set(key, list);
     return true;

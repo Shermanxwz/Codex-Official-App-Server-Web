@@ -38,11 +38,26 @@ jobs:
       - name: Install archive-validated official Codex
         run: npm install -g "@openai/codex@${CODEX_VALIDATED_VERSION}"
       - name: Seal core against pinned official stable protocol
-        run: npm run seal:core
+        run: CWEB_PROTOCOL_SEAL_MODE=stable npm run seal:core
+
+  official-schema-experimental-pinned:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '22.12.0'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Install archive-validated official Codex
+        run: npm install -g "@openai/codex@${CODEX_VALIDATED_VERSION}"
+      - name: Seal pinned official experimental protocol surface
+        run: CWEB_PROTOCOL_SEAL_MODE=experimental npm run seal:protocol
 
   official-schema-latest-advisory:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     continue-on-error: true
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -53,5 +68,5 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Install current official Codex for forward-compatibility advisory
         run: npm install -g @openai/codex@latest
-      - name: Check current stable official protocol
+      - name: Check current stable and experimental official protocol
         run: npm run seal:core

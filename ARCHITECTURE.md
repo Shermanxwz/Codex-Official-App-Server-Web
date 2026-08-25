@@ -1,85 +1,52 @@
 # Architecture
 
-## 1. Trust boundary
-
-The browser never talks to Codex directly. It talks to a same-origin HTTP gateway. The gateway owns one child `codex app-server --listen stdio://` process and only that process.
-
-The gateway does not reproduce Codex business logic. It:
-
-1. asks the installed official Codex binary to export JSON Schema **and** TypeScript protocol definitions;
-2. requires the two official export sets to agree on method membership;
-3. constructs bidirectional stable protocol registries;
-4. bridges only schema-approved browser messages to JSONL-over-stdio;
-5. forwards only schema-approved Codex notifications/server requests to authenticated browsers;
-6. supervises only its own App Server child.
-
-## 2. Protocol coverage and drift detection
-
-`OfficialSchemaRegistry` loads both export forms for:
-
-- `ClientRequest`
-- `ClientNotification`
-- `ServerRequest`
-- `ServerNotification`
-
-JSON request alternatives provide the parameter schema used by the generic Official APIs UI. The TypeScript export provides an independent upstream method-set check. JSON is the authoritative current wire schema. Every JSON wire method must be covered by the independent TypeScript export; if TypeScript is missing a JSON wire method, startup fails with `OFFICIAL_PROTOCOL_EXPORT_DRIFT`. TypeScript-only legacy/type exports are retained as diagnostics and are not admitted as current wire methods.
-
-The stable contract is therefore set-based:
+## Control plane
 
 ```text
-implemented client requests      == official stable ClientRequest methods
-implemented client notifications == official stable ClientNotification methods
-accepted server requests         == official stable ServerRequest methods
-accepted server notifications    == official stable ServerNotification methods
+Browser
+  ├─ native Codex conversation UI
+  ├─ Official APIs schema drawer
+  └─ MCP Apps Host
+       └─ opaque-origin Sandbox Proxy iframe
+            └─ untrusted MCP App srcdoc iframe
+           HTTP/SSE
+              |
+              v
+Node Web Gateway
+  ├─ auth / same-origin / access-profile gate
+  ├─ official JSON+TS protocol registry
+  ├─ stable + experimental disposition seal
+  ├─ currentTime/read host responder
+  └─ Dynamic Tool process host (optional, experimental)
+              |
+           stdio JSONL
+              v
+       official codex app-server
+              |
+              v
+       official Codex runtime
 ```
 
-Connection lifecycle operations such as `initialize` / `initialized` are implemented by the gateway itself and are not re-exposed for duplicate browser invocation.
+## Protocol authority
 
-Experimental exports use a separate opt-in mode and are outside the archive promise.
+At startup `OfficialSchemaRegistry` runs the installed Codex binary's `app-server generate-json-schema` and `generate-ts`. The JSON wire set is authoritative for invocation. TypeScript provides an independent export-coverage check. Cached schemas are tied to exact Codex version, mode and digest.
 
-## 3. Exact-version schema cache
+## Browser event model
 
-Every schema cache contains a manifest with:
+The gateway converts official server notifications and non-host-managed ServerRequests into bounded SSE events. The browser keeps live item state keyed by official item id and re-reads authoritative thread state after reconnect rather than replaying uncertain writes.
 
-- exact output of `codex --version`;
-- stable/experimental mode;
-- SHA-256 digest of the JSON and TypeScript exports.
+## MCP Apps
 
-When refresh is disabled, all three must match before a cached schema is accepted. This prevents a stale cache from silently widening or narrowing the accepted protocol after a Codex upgrade/downgrade.
+The capability is fixed during App Server initialization and flows downstream to MCP sessions. `mcpToolCall.appContext.resourceUri` (or the compatibility resource URI) selects the `ui://` resource. The host reads it through official `mcpServer/resource/read`, validates the MIME/profile and size, then sends raw HTML plus approved CSP/permissions to the outer Sandbox Proxy.
 
-## 4. Transport
+The outer proxy is a `data:` document, giving it an opaque origin different from the product page while still permitting the spec-required `allow-scripts allow-same-origin`. It creates the second iframe using the stable reference profile `allow-scripts allow-same-origin allow-forms`. That View can share the proxy's isolated origin, but it still cannot become same-origin with the product Host because the outer `data:` proxy has a distinct opaque origin. All View↔Host messages are JSON-RPC, origin/source-validated and size-bounded.
 
-Codex transport is official `stdio` JSONL, not the experimental App Server network WebSocket listener. Browser mutations use authenticated same-origin JSON POSTs; browser streaming uses SSE.
+App server tool/resource calls are proxied back through official `mcpServer/*` App Server methods. Tool calls are scoped to the originating server and checked against `_meta.ui.visibility`.
 
-Backpressure is explicit at each boundary: pending RPC count, App Server stdin buffering, JSONL record size, browser event size and slow-client SSE buffering are bounded.
+## Dynamic Tools
 
-## 5. Secret and process isolation
+Configured Dynamic Tool definitions are converted to the official canonical `thread/start.dynamicTools` shape only in experimental mode. When App Server sends `item/tool/call`, the gateway matches namespace+tool against the operator registry. Matching handlers are spawned directly with `shell:false`; arguments from the model are stdin JSON, never command-line shell text. Unmatched calls continue to the Web manual-response surface.
 
-All project-owned `CWEB_*` environment variables are removed before launching **any** Codex subprocess, including version/schema commands and the long-lived App Server. Web login secrets therefore do not become Codex or agent-command environment variables.
+## Trust boundaries
 
-Each gateway generation tracks an exact child-process object. Shutdown/crash handling signals only that child. There is no process-name lookup or global kill. Unexpected exit rejects pending RPCs, clears stale approval requests and permits a fresh official App Server generation.
-
-## 6. Reconnect and state authority
-
-The browser never assumes an SSE stream is a durable event log. After reconnect or a detected oversize/gap condition it re-reads authoritative thread/meta state. Uncertain writes are never automatically replayed.
-
-Stored threads are checked with `thread/loaded/list`; when needed they are opened through the official `thread/resume` before a new turn is started.
-
-## 7. No Codex ownership
-
-The project does not directly operate on files inside `CODEX_HOME`. Official methods such as config writes may cause **Codex itself** to change its own state; that is an explicit official operation, not a bypass.
-
-The invariant is `Never bypass Codex`, not `Codex state can never change`.
-
-## 8. State
-
-Project-owned persistent data uses XDG paths. Browser sessions are memory-only. Linux install secrets/service configuration are mode 0600 and the service uses `UMask=0077`.
-
-## 9. UI architecture
-
-The UI has two layers:
-
-- native core UX for threads, turns, model/reasoning selection, streaming, interrupt and approvals;
-- a generic Official APIs surface backed by the exact current parameter schema for every remaining stable client method.
-
-This means a new upstream stable method is wire-usable before a bespoke workflow is designed, while high-frequency workflows remain simple rather than looking like a JSON-RPC debugger.
+The Web token authenticates only this gateway. It is stripped from Codex and Dynamic Tool child environments. Codex owns its own account/config/session state. MCP App code is untrusted. Dynamic Tool executables are operator-trusted local programs but are resource-bounded by the host.
