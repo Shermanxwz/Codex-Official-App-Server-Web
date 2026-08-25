@@ -122,7 +122,8 @@
       </footer>
     </main>
 
-    <aside id="protocolPanel" class="drawer hidden" aria-label="Official APIs">
+    <aside id="protocolPanel" class="drawer hidden" aria-label="Official APIs" aria-hidden="true">
+      <div id="protocolResize" class="drawer-resize" role="separator" aria-orientation="vertical" aria-label="调整官方接口面板宽度" tabindex="0"></div>
       <div class="drawer-head">
         <div>
           <h2 data-i18n="protocol">官方接口</h2>
@@ -165,7 +166,7 @@
     </aside>
   </div>
 
-  <div id="loginModal" class="modal hidden">
+  <div id="loginModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
     <form id="loginForm" class="modal-card login-card">
       <div class="login-logo brand-mark">
         <svg viewBox="0 0 24 24"><path d="M12 2.5 20.2 7v10L12 21.5 3.8 17V7L12 2.5Zm0 2.3L6 8.1v7.8l6 3.3 6-3.3V8.1l-6-3.3Z"/></svg>
@@ -179,7 +180,7 @@
     </form>
   </div>
 
-  <div id="newThreadModal" class="modal hidden">
+  <div id="newThreadModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
     <form id="newThreadForm" class="modal-card">
       <div class="modal-head">
         <div>
