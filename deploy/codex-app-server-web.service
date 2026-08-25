@@ -11,6 +11,8 @@ WorkingDirectory=__PROJECT_ROOT__
 ExecStart="__NODE_BIN__" "__PROJECT_ROOT__/src/server.mjs"
 Environment=NODE_ENV=production
 EnvironmentFile=__ENV_FILE__
+# Proxy variables, when present in the private EnvironmentFile, are forwarded
+# to the official Codex child by the gateway's sanitized environment policy.
 Environment=CWEB_REQUIRE_AUTH=1
 Restart=on-failure
 RestartPreventExitStatus=2 3

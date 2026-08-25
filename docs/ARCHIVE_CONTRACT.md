@@ -31,6 +31,8 @@ The CI-tested pull-request head tree and the squash-merged `main` tree must be b
 
 The gateway may invoke only methods present in the installed official App Server schema. It does not maintain a handwritten ClientRequest allow-list. Browser-originated requests pass schema, access-profile and origin/auth gates.
 
+The human-facing Web surface includes official image input, an inventory summary for MCP servers/Skills/Plugins/installed Apps, and a collapsed technical view for method identifiers, schemas, parameters, and results. Image attachments are bounded and sent as the official `UserInput` `image` variant; arbitrary generic-file upload is not invented where the official protocol has no such input variant.
+
 Server-initiated requests require an explicit disposition. Unknown official evolution is fail-closed. Platform-only token refresh and attestation are rejected instead of emulated.
 
 ## Host rule

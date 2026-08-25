@@ -102,11 +102,12 @@
       <footer class="composer-wrap">
         <div id="composerCard" class="composer-card">
           <textarea id="prompt" rows="1" data-i18n-placeholder="prompt" placeholder="给 Codex 发送消息…" spellcheck="true"></textarea>
+          <div id="attachmentTray" class="attachment-tray hidden" aria-live="polite"></div>
+          <input id="attachmentInput" class="hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" multiple>
           <div class="composer-toolbar">
             <div class="composer-left">
-              <button id="workspaceButton" class="pill-button" type="button" title="Workspace">
-                <span>⌂</span><span id="workspaceChip">—</span>
-              </button>
+              <button id="attachButton" class="pill-button attach-button" type="button" data-i18n-title="attachImage" data-i18n="attachImage" title="添加图片">＋ 图片</button>
+              <button id="capabilitiesButton" class="pill-button" type="button" data-i18n="capabilities" data-i18n-title="capabilities" title="能力">能力</button>
               <select id="modelSelect" class="pill-select" data-i18n-title="model" title="模型">
                 <option value="">Codex</option>
               </select>
@@ -132,6 +133,16 @@
         </div>
         <button id="closeProtocol" class="icon-button" type="button">×</button>
       </div>
+      <section id="capabilitySummary" class="capability-summary" aria-label="当前能力">
+        <div class="capability-summary-head">
+          <div>
+            <strong data-i18n="capabilityTitle">当前能力</strong>
+            <small id="capabilityStatus" data-i18n="capabilityLoading">读取官方能力…</small>
+          </div>
+          <button id="refreshCapabilities" class="tiny-button" type="button" data-i18n-title="capabilityRefresh" title="刷新能力">↻</button>
+        </div>
+        <div id="capabilityCards" class="capability-cards"></div>
+      </section>
       <div class="protocol-toolbar">
         <label class="search-box">
           <span>⌕</span>

@@ -45,7 +45,7 @@ Host page
 
 ## Normal Web UX
 
-The first-class UI includes thread history/read/resume, live turns and items, streaming deltas, model/reasoning controls, interrupt, command/file/permission approvals, user-input and MCP elicitation forms, reconnect/resync, and MCP App rendering. Less common official methods remain callable through the generated **Official APIs** drawer.
+The first-class UI includes thread history/read/resume, live turns and items, streaming deltas, model/reasoning controls, official image attachments (`turn/start` `image` inputs), interrupt, command/file/permission approvals, user-input and MCP elicitation forms, reconnect/resync, and MCP App rendering. The **Capabilities** summary reads the official MCP, Skills, Plugin, and installed App inventories; less common official methods remain callable through the generated **Official APIs** drawer with human labels and collapsed technical payloads.
 
 ## Requirements
 
@@ -94,7 +94,7 @@ Detailed MCP App and Dynamic Tool contracts are in [docs/HOSTS.md](docs/HOSTS.md
 ./scripts/install-linux.sh
 ```
 
-The installer writes only project-owned XDG config/state plus a systemd user service. It does not install, upgrade, authenticate, or mutate Codex itself.
+The installer writes only project-owned XDG config/state plus a systemd user service. It does not install, upgrade, authenticate, or mutate Codex itself. When the invoking shell has explicit proxy variables, it preserves them in the mode-`600` service environment so a user service can reach the official upstream on networks that require a local proxy.
 
 ## Reproducible seal
 

@@ -17,6 +17,21 @@ test('archive support registry covers every current first-class Codex item dispo
   for (const type of THREAD_ITEM_TYPES) assert.match(app, new RegExp(`case\\s*['\"]${type}['\"]`), `missing native renderer disposition for ${type}`);
 });
 
+test('composer keeps workspace selection in the primary new-thread flow and supports official image input', () => {
+  const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+  const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
+  assert.doesNotMatch(html, /id="workspaceButton"/);
+  assert.match(html, /id="attachButton"/);
+  assert.match(html, /id="attachmentInput"[^>]+accept="image\//);
+  assert.match(html, /id="capabilitiesButton"/);
+  assert.match(html, /id="capabilityCards"/);
+  assert.match(app, /type:'image',url:/);
+  assert.match(app, /threadSelectionSerial/);
+  assert.match(app, /function loadMethodSchema/);
+  assert.match(app, /mcpServerStatus\/list/);
+  assert.match(app, /plugin\/list/);
+});
+
 test('all declared ServerRequest methods have one explicit trust/UI disposition', () => {
   const entries = Object.entries(SERVER_REQUEST_SUPPORT);
   assert.equal(entries.length, 11);
@@ -47,6 +62,8 @@ test('runtime server advertises the implemented MCP Apps profile and gates Dynam
   assert.match(server, /CWEB_DYNAMIC_TOOLS_FILE requires CWEB_EXPERIMENTAL=1/);
   assert.match(server, /properties\?\.dynamicTools/);
   assert.match(server, /message\.method === 'currentTime\/read'/);
+  assert.match(server, /function compactRpcError/);
+  assert.doesNotMatch(server, /rpc: error\.rpc/);
 });
 
 test('MCP Apps host bridge covers stable server tool/resource proxy surfaces', () => {

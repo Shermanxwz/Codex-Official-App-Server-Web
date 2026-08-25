@@ -72,6 +72,16 @@ else
   fi
   echo "Keeping existing $ENV_FILE"
 fi
+# A user systemd manager does not necessarily inherit the desktop shell's
+# proxy environment. Preserve explicitly configured proxy variables in the
+# private service environment so the official Codex runtime can reach its
+# upstream endpoint on machines that require a local proxy.
+for proxy_name in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy; do
+  proxy_value="${!proxy_name-}"
+  if [[ -n "$proxy_value" ]] && ! grep -q "^${proxy_name}=" "$ENV_FILE"; then
+    printf '%s=%s\n' "$proxy_name" "$(quote_env "$proxy_value")" >> "$ENV_FILE"
+  fi
+done
 chmod 600 "$ENV_FILE"
 
 ROOT="$ROOT" NODE_BIN="$NODE_BIN" ENV_FILE="$ENV_FILE" TEMPLATE="$ROOT/deploy/codex-app-server-web.service" OUTPUT="$SERVICE_FILE" "$NODE_BIN" <<'NODE'

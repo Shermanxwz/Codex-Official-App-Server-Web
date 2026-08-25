@@ -362,6 +362,14 @@ function errorStatus(error) {
   return 500;
 }
 
+function compactRpcError(error) {
+  if (!(error instanceof CodexRpcError)) return null;
+  const raw = String(error.rpc?.message || error.message || '').trim();
+  const beforeMarkup = raw.indexOf('<');
+  const message = (beforeMarkup >= 0 ? raw.slice(0, beforeMarkup) : raw).replace(/\s+/g, ' ').trim();
+  return { code: error.rpc?.code ?? null, message: (message || 'Codex upstream request failed').slice(0, 240) };
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
@@ -371,8 +379,10 @@ const server = http.createServer(async (req, res) => {
     if (serveStatic(req, res, url.pathname)) return;
     res.writeHead(404, secureHeaders({ 'Content-Type': 'text/plain; charset=utf-8' })); res.end('Not found');
   } catch (error) {
-    console.error(error);
-    json(res, errorStatus(error), { error: error.code || 'INTERNAL_ERROR', message: error.message, ...(error instanceof CodexRpcError ? { rpc: error.rpc } : {}) });
+    const rpcError = compactRpcError(error);
+    const publicMessage = rpcError?.message || String(error.message || '').replace(/\s+/g, ' ').slice(0, 1200);
+    console.error(`[request] ${error.code || (rpcError ? 'CODEX_RPC_ERROR' : 'INTERNAL_ERROR')}: ${publicMessage}`);
+    json(res, errorStatus(error), { error: error.code || (rpcError ? 'CODEX_RPC_ERROR' : 'INTERNAL_ERROR'), message: publicMessage, ...(rpcError ? { rpc: rpcError } : {}) });
   }
 });
 
