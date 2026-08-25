@@ -55,6 +55,9 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /function createWorkGroup/);
   assert.match(app, /function showContextCompaction/);
   assert.match(app, /function preserveLiveTimeline/);
+  assert.match(app, /function removeIgnoredProtocolEvents/);
+  assert.match(app, /m==='turn\/diff\/updated'\|\|m==='turn\/plan\/updated'/);
+  assert.match(app, /else if\(r\.method==='item\/tool\/call'\)\{if\(state\.meta\?\.capabilities\?\.dynamicToolHost\?\.enabled===true\)/);
   assert.match(app, /LAST_THREAD_KEY/);
   assert.match(app, /function restoreLastThread/);
   assert.match(app, /function adoptPendingTurnBlock/);
@@ -98,8 +101,17 @@ test('runtime server advertises the implemented MCP Apps profile and gates Dynam
   assert.match(server, /CWEB_DYNAMIC_TOOLS_FILE requires CWEB_EXPERIMENTAL=1/);
   assert.match(server, /properties\?\.dynamicTools/);
   assert.match(server, /message\.method === 'currentTime\/read'/);
+  assert.match(server, /function rejectDynamicToolRequest/);
+  assert.match(server, /dynamic-tool-host-unconfigured/);
   assert.match(server, /function compactRpcError/);
   assert.doesNotMatch(server, /rpc: error\.rpc/);
+});
+
+test('Codex child transport failures have an explicit containment path', () => {
+  const client = fs.readFileSync(path.join(root, 'src/codex-client.mjs'), 'utf8');
+  assert.match(client, /child\.stdin\.on\('error', failTransport\)/);
+  assert.match(client, /emit\('transportError'/);
+  assert.match(client, /try \{ child\.stdin\.write\(data\); \}/);
 });
 
 test('MCP Apps host bridge covers stable server tool/resource proxy surfaces', () => {

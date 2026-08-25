@@ -160,6 +160,21 @@ function rejectMachineOnlyServerRequest(message) {
   pushEvent('serverRequestUnsupported', { method: message.method, reason: 'platform-only-client-capability' });
 }
 
+function rejectDynamicToolRequest(message, reason) {
+  const namespace = String(message.params?.namespace || 'codex_app');
+  const tool = String(message.params?.tool || 'unknown');
+  const configured = dynamicToolHost.size > 0;
+  const detail = configured
+    ? `Dynamic Tool is not registered: ${namespace}:${tool}`
+    : `Dynamic Tool Host is not configured for ${namespace}:${tool}`;
+  try { codex.respondError(message.id, { code: -32601, message: detail }); }
+  catch { /* child may already be gone */ }
+  pushEvent('serverRequestUnsupported', {
+    method: message.method, reason, message: detail, namespace, tool,
+  });
+  return true;
+}
+
 async function autoHandleServerRequest(message) {
   if (message.method === 'currentTime/read') {
     if (!config.experimental) return false;
@@ -167,12 +182,15 @@ async function autoHandleServerRequest(message) {
     pushEvent('serverRequestAutoHandled', { method: message.method });
     return true;
   }
-  if (message.method === 'item/tool/call' && dynamicToolHost.canHandle(message.params)) {
-    const result = await dynamicToolHost.handle(message.params);
-    if (result) codex.respond(message.id, result);
-    else return false;
-    pushEvent('serverRequestAutoHandled', { method: message.method, tool: message.params?.tool || null, namespace: message.params?.namespace || null });
-    return true;
+  if (message.method === 'item/tool/call') {
+    if (dynamicToolHost.canHandle(message.params)) {
+      const result = await dynamicToolHost.handle(message.params);
+      if (result) codex.respond(message.id, result);
+      else return false;
+      pushEvent('serverRequestAutoHandled', { method: message.method, tool: message.params?.tool || null, namespace: message.params?.namespace || null });
+      return true;
+    }
+    return rejectDynamicToolRequest(message, dynamicToolHost.size ? 'dynamic-tool-not-registered' : 'dynamic-tool-host-unconfigured');
   }
   return false;
 }
@@ -208,6 +226,7 @@ codex.on('notification', (message) => {
 });
 codex.on('stderr', (line) => { const text = String(line).trim(); if (text) console.error(`[codex] ${text.slice(0, 4000)}`); });
 codex.on('protocolError', (value) => pushEvent('protocolError', value));
+codex.on('transportError', ({ error }) => console.error(`[codex] transport error: ${error?.code || 'unknown'} ${error?.message || error}`));
 codex.on('serverRequestsCleared', (value) => pushEvent('serverRequestsCleared', value));
 codex.on('exit', (value) => pushEvent('codexExit', value));
 codex.on('ready', (initialize) => { fatalCodexError = null; restartAttempt = 0; pushEvent('codexReady', { initialize }); });

@@ -64,3 +64,16 @@ test('gateway closes capability, experimental Dynamic Tool and currentTime host 
  const clock=seen.find(x=>x.id===100&&x.result);assert.equal(Number.isInteger(clock.result.currentTimeAt),true);
  const tool=seen.find(x=>x.id===101&&x.result);assert.equal(tool.result.success,true);assert.equal(tool.result.contentItems[0].text,'hosted:world');
 });
+
+test('gateway rejects an unconfigured Dynamic Tool call without exposing a manual approval card',async(t)=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cweb-host-unconfigured-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const logFile=path.join(dir,'codex.log');
+ const codex=fakeCodex(dir,logFile),port=await freePort(),url=`http://127.0.0.1:${port}`,token='host-test-token';let output='';
+ const child=spawn(process.execPath,['src/server.mjs'],{cwd:root,env:{...process.env,CWEB_CODEX_BIN:codex,CWEB_STATE_DIR:path.join(dir,'state'),CWEB_WORKSPACE:dir,CWEB_HOST:'127.0.0.1',CWEB_PORT:String(port),CWEB_REQUIRE_AUTH:'1',CWEB_TOKEN:token,CWEB_EXPERIMENTAL:'1',CWEB_MCP_APPS:'0'},stdio:['ignore','pipe','pipe']});
+ child.stdout.on('data',x=>output+=x);child.stderr.on('data',x=>output+=x);t.after(()=>{if(child.exitCode===null)child.kill('SIGTERM')});await ready(url,child,()=>output);
+ const origin=url,login=await fetch(`${url}/api/login`,{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({token})});assert.equal(login.status,200,output);const cookie=login.headers.get('set-cookie').split(';',1)[0];
+ const controller=new AbortController();t.after(()=>controller.abort());const events=await fetch(`${url}/api/events`,{headers:{cookie},signal:controller.signal});assert.equal(events.status,200);
+ const unsupported= (async()=>{const reader=events.body.getReader(),decoder=new TextDecoder();let buffer='';for(;;){const {done,value}=await reader.read();if(done)throw new Error('event stream ended before unsupported request');buffer+=decoder.decode(value,{stream:true});const frames=buffer.split('\n\n');buffer=frames.pop()||'';for(const frame of frames){const line=frame.split('\n').find(x=>x.startsWith('data: '));if(!line)continue;const event=JSON.parse(line.slice(6));if(event.type==='serverRequestUnsupported')return event;}}})();
+ const start=await fetch(`${url}/api/rpc`,{method:'POST',headers:{origin,cookie,'content-type':'application/json'},body:JSON.stringify({method:'thread/start',params:{cwd:dir}})});assert.equal(start.status,200,output);
+ const event=await Promise.race([unsupported,new Promise((_,reject)=>setTimeout(()=>reject(new Error('unsupported event timed out')),2000))]);assert.equal(event.payload.reason,'dynamic-tool-host-unconfigured');assert.match(event.payload.message,/Dynamic Tool Host is not configured/);
+ const seen=await waitFor(logFile,r=>r.some(x=>x.id===101&&x.error));const tool=seen.find(x=>x.id===101&&x.error);assert.equal(tool.error.code,-32601);assert.match(tool.error.message,/Dynamic Tool Host is not configured/);
+});

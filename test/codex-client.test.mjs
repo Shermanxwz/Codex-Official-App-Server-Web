@@ -10,9 +10,9 @@ function fakeCodex(){
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'fake-codex-'));
   const file=path.join(dir,'codex');
   fs.writeFileSync(file,`#!/usr/bin/env node
-const readline=require('node:readline');
+const fs=require('node:fs'),readline=require('node:readline');
 const rl=readline.createInterface({input:process.stdin});
-rl.on('line',line=>{const m=JSON.parse(line); if(m.method==='initialize'){console.log(JSON.stringify({id:m.id,result:{codexHome:'/fake',platformFamily:'unix',platformOs:'linux',clientCapabilities:m.params.capabilities}}));return;} if(m.method==='initialized')return; if(m.method==='thread/list'){console.log(JSON.stringify({id:m.id,result:{data:[{id:'t1',preview:'hello'}]}}));return;} if(m.method==='test/requestServer'){console.log(JSON.stringify({id:m.id,result:{ok:true}})); console.log(JSON.stringify({id:99,method:'item/commandExecution/requestApproval',params:{threadId:'t1'}})); return;} if(m.method==='test/manyServerRequests'){console.log(JSON.stringify({id:m.id,result:{ok:true}})); for(let i=0;i<3;i++) console.log(JSON.stringify({id:200+i,method:'item/commandExecution/requestApproval',params:{n:i}})); return;} if(m.method==='test/crash'){process.exit(42)} if(m.method==='test/hang')return; if(m.id!==undefined) console.log(JSON.stringify({id:m.id,result:{echo:m.params}}));});
+rl.on('line',line=>{const m=JSON.parse(line); if(m.method==='initialize'){console.log(JSON.stringify({id:m.id,result:{codexHome:'/fake',platformFamily:'unix',platformOs:'linux',clientCapabilities:m.params.capabilities}}));return;} if(m.method==='initialized')return; if(m.method==='thread/list'){console.log(JSON.stringify({id:m.id,result:{data:[{id:'t1',preview:'hello'}]}}));return;} if(m.method==='test/requestServer'){console.log(JSON.stringify({id:m.id,result:{ok:true}})); console.log(JSON.stringify({id:99,method:'item/commandExecution/requestApproval',params:{threadId:'t1'}})); return;} if(m.method==='test/manyServerRequests'){console.log(JSON.stringify({id:m.id,result:{ok:true}})); for(let i=0;i<3;i++) console.log(JSON.stringify({id:200+i,method:'item/commandExecution/requestApproval',params:{n:i}})); return;} if(m.method==='test/crash'){process.exit(42)} if(m.method==='test/closeStdin'){process.stdin.destroy();try{fs.closeSync(0)}catch{}setTimeout(()=>{},1000);return;} if(m.method==='test/hang')return; if(m.id!==undefined) console.log(JSON.stringify({id:m.id,result:{echo:m.params}}));});
 `,{mode:0o755});
   return {dir,file};
 }
@@ -67,6 +67,23 @@ test('pending RPC count is bounded before writes can grow without limit', async(
   await assert.rejects(client.request('thread/list',{}),error=>error.code==='CODEX_CLIENT_BUSY' && error.status===503);
   client.close();
   await assert.rejects(first,/closed/i);
+});
+
+test('child stdin EPIPE is reported as transport failure instead of crashing the gateway client', async(t)=>{
+  const fake=fakeCodex(); t.after(()=>fs.rmSync(fake.dir,{recursive:true,force:true}));
+  const client=new CodexAppServer({codexBin:fake.file,cwd:fake.dir,timeoutMs:2000}); t.after(()=>client.close());
+  await client.start();
+  const transport=once(client,'transportError');
+  const closing=client.request('test/closeStdin',{}).catch(error=>error);
+  await new Promise(resolve=>setTimeout(resolve,50));
+  const probe=client.request('thread/list',{}).catch(error=>error);
+  const [event,closingError,probeError]=await Promise.all([
+    Promise.race([transport,new Promise((_,reject)=>setTimeout(()=>reject(new Error('transport error event timed out')),1000))]),
+    closing,
+    probe,
+  ]);
+  const description=`${event[0]?.error?.code||''} ${event[0]?.error?.message||''} ${closingError?.message||''} ${probeError?.message||''}`;
+  assert.match(description,/EPIPE|pipe|closed|unavailable/i);
 });
 
 

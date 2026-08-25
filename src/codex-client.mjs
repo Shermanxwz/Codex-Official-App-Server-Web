@@ -87,9 +87,15 @@ export class CodexAppServer extends EventEmitter {
     this.child = child;
     this.stdoutBuffer = Buffer.alloc(0);
 
+    const failTransport = (error) => {
+      if (this.child !== child || generation !== this.generation) return;
+      this.#failAll(error);
+      this.emit('transportError', { error, generation });
+    };
     child.stdout.on('data', (chunk) => this.#onStdoutChunk(child, generation, chunk));
     child.stderr.on('data', (chunk) => { if (this.child === child) this.emit('stderr', chunk.toString()); });
-    child.once('error', (error) => { if (this.child === child) this.#failAll(error); });
+    child.stdin.on('error', failTransport);
+    child.once('error', failTransport);
     child.once('exit', (code, signal) => this.#onExit(child, generation, code, signal));
 
     try {
@@ -136,13 +142,18 @@ export class CodexAppServer extends EventEmitter {
   }
 
   #send(message) {
-    if (!this.child?.stdin?.writable) throw new Error('Codex App Server stdin is unavailable');
+    const child = this.child;
+    if (!child?.stdin?.writable) throw new Error('Codex App Server stdin is unavailable');
     const data = `${JSON.stringify(message)}\n`;
     const bytes = Buffer.byteLength(data);
-    if (this.child.stdin.writableLength + bytes > this.maxStdinBufferBytes) {
+    if (child.stdin.writableLength + bytes > this.maxStdinBufferBytes) {
       throw new CodexClientBusyError('Codex App Server stdin backpressure limit reached');
     }
-    this.child.stdin.write(data);
+    try { child.stdin.write(data); }
+    catch (error) {
+      if (this.child === child) this.#failAll(error);
+      throw error;
+    }
   }
 
   #onLine(line) {
