@@ -67,6 +67,10 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /m==='turn\/plan\/updated'/);
   assert.match(app, /function upsertOfficialPlan/);
   assert.match(app, /officialSource/);
+  assert.match(app, /renderOfficialPlanInteractive/);
+  assert.match(app, /mobilePlanInteraction/);
+  assert.match(app, /closeOpenOfficialPlans/);
+  assert.match(app, /Dynamic Tool Host is not configured for/);
   assert.match(app, /else if\(r\.method==='item\/tool\/call'\)\{if\(state\.meta\?\.capabilities\?\.dynamicToolHost\?\.enabled===true\)/);
   assert.match(app, /LAST_THREAD_KEY/);
   assert.match(app, /function restoreLastThread/);
@@ -112,6 +116,7 @@ test('published support summary advertises only implemented archive hosts', () =
 
 test('runtime server advertises the implemented MCP Apps profile and gates Dynamic Tools experimentally', () => {
   const server = fs.readFileSync(path.join(root, 'src/server.mjs'), 'utf8');
+  const config = fs.readFileSync(path.join(root, 'src/config.mjs'), 'utf8');
   assert.match(server, /MCP_APPS_EXTENSION/);
   assert.match(server, /mimeTypes:\s*\[MCP_APPS_MIME\]/);
   assert.match(server, /mcpAppsDoubleIframeSandbox:\s*true/);
@@ -120,6 +125,8 @@ test('runtime server advertises the implemented MCP Apps profile and gates Dynam
   assert.match(server, /message\.method === 'currentTime\/read'/);
   assert.match(server, /function rejectDynamicToolRequest/);
   assert.match(server, /dynamic-tool-host-unconfigured/);
+  assert.match(server, /message\.method === 'turn\/diff\/updated'\) return/);
+  assert.match(config, /\['turn\/diff\/updated', \.\.\.list\('CWEB_NOTIFICATION_OPT_OUT'\)\]/);
   assert.match(server, /function compactRpcError/);
   assert.doesNotMatch(server, /rpc: error\.rpc/);
 });

@@ -275,3 +275,23 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
   #effortSelect{max-width:88px}
   .composer-right{gap:4px}
 }
+
+/* Official plan affordance: keep a compact progress trigger in the timeline;
+   desktop users preview the official steps on hover/focus, while touch users
+   explicitly open and close the same details. */
+.official-plan{position:relative;z-index:2}
+.official-plan-trigger{display:block;width:100%;margin:0;padding:0;border:0;color:inherit;background:transparent;text-align:left;font:inherit;cursor:pointer}
+.official-plan-trigger:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:9px}
+.official-plan-head{min-height:22px}
+.official-plan-state{color:var(--muted);font-size:9px;white-space:nowrap}
+.official-plan-details{visibility:hidden;max-height:0;overflow:hidden;opacity:0;transition:max-height .18s ease,opacity .14s ease,visibility .14s ease}
+@media (hover:hover) and (pointer:fine){
+  .official-plan:hover .official-plan-details,
+  .official-plan:focus-within .official-plan-details{visibility:visible;max-height:620px;opacity:1}
+}
+@media (max-width:760px), (pointer:coarse){
+  .official-plan-trigger{cursor:pointer}
+  .official-plan-details{display:none;visibility:visible;max-height:none;opacity:1;overflow:visible}
+  .official-plan.open .official-plan-details{display:block}
+  .official-plan.open{z-index:8}
+}

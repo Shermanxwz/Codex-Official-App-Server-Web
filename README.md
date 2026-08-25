@@ -84,7 +84,7 @@ For remote use, keep the service behind Tailscale, SSH tunneling, or an authenti
 | `CWEB_MCP_APPS` | `1` | advertise/render the stable MCP Apps extension |
 | `CWEB_MCP_APP_PERMISSIONS` | empty | optional requested-permission allow-list; browser secure-context/Permissions Policy rules still apply |
 | `CWEB_DYNAMIC_TOOLS_FILE` | empty | v1 Dynamic Tool Host JSON configuration; requires `CWEB_EXPERIMENTAL=1` |
-| `CWEB_NOTIFICATION_OPT_OUT` | empty | exact App Server notification methods to suppress |
+| `CWEB_NOTIFICATION_OPT_OUT` | `turn/diff/updated` | additional App Server notification methods to suppress; the aggregate diff is always hidden from the conversation timeline |
 | `CWEB_STATE_DIR` | XDG state path | project schema/cache state |
 | `CWEB_SCHEMA_REFRESH` | `1` | regenerate official protocol exports at startup |
 

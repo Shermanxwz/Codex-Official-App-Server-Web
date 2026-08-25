@@ -84,7 +84,7 @@ npm start
 | `CWEB_MCP_APPS` | `1` | 声明并渲染稳定 MCP Apps 扩展 |
 | `CWEB_MCP_APP_PERMISSIONS` | 空 | 可选权限 allow-list；最终仍受浏览器 secure-context / Permissions Policy 约束 |
 | `CWEB_DYNAMIC_TOOLS_FILE` | 空 | Dynamic Tool Host v1 JSON；要求 `CWEB_EXPERIMENTAL=1` |
-| `CWEB_NOTIFICATION_OPT_OUT` | 空 | 精确 notification opt-out |
+| `CWEB_NOTIFICATION_OPT_OUT` | `turn/diff/updated` | 额外要抑制的 notification；聚合 Diff 始终不进入对话时间线 |
 | `CWEB_STATE_DIR` | XDG state | 项目 schema/cache 状态 |
 | `CWEB_SCHEMA_REFRESH` | `1` | 启动时重新生成官方协议 |
 

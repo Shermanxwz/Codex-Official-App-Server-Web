@@ -222,6 +222,9 @@ codex.on('notification', (message) => {
     pushEvent('protocolMismatch', { direction: 'serverNotification', method: message.method });
     return;
   }
+  // Older Codex builds may still emit this after initialization even when the
+  // client opted out. It is an internal aggregate, never a timeline item.
+  if (message.method === 'turn/diff/updated') return;
   pushEvent('notification', message);
 });
 codex.on('stderr', (line) => { const text = String(line).trim(); if (text) console.error(`[codex] ${text.slice(0, 4000)}`); });

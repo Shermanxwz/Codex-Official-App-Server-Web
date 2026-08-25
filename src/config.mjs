@@ -44,7 +44,10 @@ export const config = Object.freeze({
   publicOrigin: process.env.CWEB_PUBLIC_ORIGIN || '',
   token: process.env.CWEB_TOKEN || '',
   accessProfile: choice('CWEB_ACCESS_PROFILE', 'full', ['read', 'coding', 'admin', 'full']),
-  notificationOptOut: list('CWEB_NOTIFICATION_OPT_OUT'),
+  // The aggregate diff is available through fileChange items and is not a
+  // human-facing conversation event. Suppress it at the official handshake;
+  // the browser still keeps a defensive presentation-layer filter.
+  notificationOptOut: [...new Set(['turn/diff/updated', ...list('CWEB_NOTIFICATION_OPT_OUT')])],
   mcpAppsEnabled: bool('CWEB_MCP_APPS', true),
   mcpAppPermissions: allowedList('CWEB_MCP_APP_PERMISSIONS', ['camera', 'microphone', 'geolocation', 'clipboardWrite']),
   dynamicToolsFile: process.env.CWEB_DYNAMIC_TOOLS_FILE ? path.resolve(process.env.CWEB_DYNAMIC_TOOLS_FILE) : '',
