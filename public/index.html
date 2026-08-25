@@ -106,17 +106,14 @@
           <input id="attachmentInput" class="hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" multiple>
           <div class="composer-toolbar">
             <div class="composer-left">
-              <button id="attachButton" class="pill-button attach-button" type="button" data-i18n-title="attachImage" data-i18n="attachImage" title="添加图片">＋ 图片</button>
-              <button id="capabilitiesButton" class="pill-button" type="button" data-i18n="capabilities" data-i18n-title="capabilities" title="能力">能力</button>
-              <select id="modelSelect" class="pill-select" data-i18n-title="model" title="模型">
-                <option value="">Codex</option>
-              </select>
-              <select id="effortSelect" class="pill-select" data-i18n-title="reasoning" title="推理强度">
-                <option value="">Default</option>
-              </select>
+              <button id="attachButton" class="pill-button attach-button" type="button" data-i18n-title="pasteImageHint" data-i18n="attachImage" title="点击添加或按 Ctrl+V 粘贴图片">＋ 图片</button>
+              <select id="modelSelect" class="pill-select" data-i18n-title="model" title="模型" aria-label="模型"></select>
+              <select id="effortSelect" class="pill-select" data-i18n-title="reasoning" title="推理强度" aria-label="推理强度"></select>
             </div>
             <div class="composer-right">
               <span id="composerHint" class="composer-hint" data-i18n="sendHint">Enter 发送 · Shift+Enter 换行</span>
+              <span id="imagePasteHint" class="composer-hint composer-hint-secondary" data-i18n="pasteImageHint">Ctrl+V 粘贴图片</span>
+              <span id="configSyncStatus" class="composer-sync-status" data-i18n="configSynced">已与 Codex 同步</span>
               <button id="send" class="send-button" type="button" aria-label="Send">↑</button>
             </div>
           </div>

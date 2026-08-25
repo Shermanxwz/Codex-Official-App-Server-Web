@@ -23,13 +23,19 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.doesNotMatch(html, /id="workspaceButton"/);
   assert.match(html, /id="attachButton"/);
   assert.match(html, /id="attachmentInput"[^>]+accept="image\//);
-  assert.match(html, /id="capabilitiesButton"/);
+  assert.doesNotMatch(html, /id="capabilitiesButton"/);
+  assert.match(html, /id="imagePasteHint"/);
   assert.match(html, /id="capabilityCards"/);
   assert.match(app, /type:'image',url:/);
+  assert.match(app, /function handleClipboardPaste/);
+  assert.match(app, /addEventListener\('paste',handleClipboardPaste\)/);
   assert.match(app, /threadSelectionSerial/);
   assert.match(app, /function loadMethodSchema/);
   assert.match(app, /mcpServerStatus\/list/);
   assert.match(app, /plugin\/list/);
+  assert.match(app, /config\/read/);
+  assert.match(app, /config\/batchWrite/);
+  assert.match(app, /model_reasoning_effort/);
 });
 
 test('all declared ServerRequest methods have one explicit trust/UI disposition', () => {
