@@ -39,9 +39,16 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(html, /id="composerMode"/);
   assert.match(html, /id="contextIndicator"/);
   assert.match(html, /id="compactThread"/);
+  assert.match(html, /id="contextUsage"/);
+  assert.match(html, /id="contextUsageFill"/);
+  assert.match(html, /id="contextUsageRemainingValue"/);
   assert.match(app, /turn\/steer/);
   assert.match(app, /thread\/compact\/start/);
   assert.match(app, /thread\/compacted/);
+  assert.match(app, /thread\/tokenUsage\/updated/);
+  assert.match(app, /modelContextWindow/);
+  assert.match(app, /contextUsageSnapshot/);
+  assert.match(app, /tokenUsageThreadId/);
   assert.match(app, /function createWorkGroup/);
   assert.match(app, /function showContextCompaction/);
 });
