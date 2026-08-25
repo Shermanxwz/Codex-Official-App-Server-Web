@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { CodexAppServer } from '../src/codex-client.mjs';
 import { OfficialSchemaRegistry } from '../src/schema-registry.mjs';
 
-const APP_VERSION='0.2.1';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const APP_VERSION=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8')).version;
 const core=spawnSync(process.execPath,['scripts/seal-core.mjs'],{cwd:root,encoding:'utf8',stdio:'inherit',env:process.env});
 if(core.error) throw core.error;
 if(core.status!==0) process.exit(core.status||1);
