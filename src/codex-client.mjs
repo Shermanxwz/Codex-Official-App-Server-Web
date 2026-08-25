@@ -25,7 +25,8 @@ export function sanitizedCodexEnv(source = process.env) {
 export class CodexAppServer extends EventEmitter {
   constructor({
     codexBin = 'codex', cwd, experimental = false, capabilities = {}, timeoutMs = 600_000,
-    maxPending = 64, maxServerRequests = maxPending, maxStdinBufferBytes = 4 * 1024 * 1024, maxLineBytes = 32 * 1024 * 1024,
+    maxPending = 64, maxServerRequests = maxPending, maxStdinBufferBytes = 4 * 1024 * 1024,
+    maxLineBytes = 32 * 1024 * 1024,
   }) {
     super();
     this.codexBin = codexBin;
@@ -53,16 +54,13 @@ export class CodexAppServer extends EventEmitter {
     if (this.ready) return this.ready;
     const promise = this.#startProcess();
     this.ready = promise;
-    promise.catch(() => {
-      if (this.ready === promise) this.ready = null;
-    });
+    promise.catch(() => { if (this.ready === promise) this.ready = null; });
     return promise;
   }
 
   #initializeCapabilities() {
     const configuredExtensions = this.capabilities.extensions && typeof this.capabilities.extensions === 'object'
-      ? this.capabilities.extensions
-      : {};
+      ? this.capabilities.extensions : {};
     const extensions = Object.fromEntries(
       Object.entries({ 'openai/form': {}, ...configuredExtensions }).filter(([, value]) => value !== undefined),
     );
@@ -75,6 +73,7 @@ export class CodexAppServer extends EventEmitter {
       delete capabilities.optOutNotificationMethods;
     }
     if (!capabilities.requestAttestation) delete capabilities.requestAttestation;
+    if (!capabilities.experimentalApi) delete capabilities.experimentalApi;
     return capabilities;
   }
 
@@ -89,21 +88,13 @@ export class CodexAppServer extends EventEmitter {
     this.stdoutBuffer = Buffer.alloc(0);
 
     child.stdout.on('data', (chunk) => this.#onStdoutChunk(child, generation, chunk));
-    child.stderr.on('data', (chunk) => {
-      if (this.child === child) this.emit('stderr', chunk.toString());
-    });
-    child.once('error', (error) => {
-      if (this.child === child) this.#failAll(error);
-    });
+    child.stderr.on('data', (chunk) => { if (this.child === child) this.emit('stderr', chunk.toString()); });
+    child.once('error', (error) => { if (this.child === child) this.#failAll(error); });
     child.once('exit', (code, signal) => this.#onExit(child, generation, code, signal));
 
     try {
       const result = await this.#requestRaw('initialize', {
-        clientInfo: {
-          name: 'codex_app_server_web',
-          title: 'Codex App Server Web',
-          version: '0.3.0',
-        },
+        clientInfo: { name: 'codex_app_server_web', title: 'Codex App Server Web', version: '0.4.0' },
         capabilities: this.#initializeCapabilities(),
       }, 30_000);
       if (this.child !== child || generation !== this.generation) throw new Error('Codex App Server changed during initialization');
@@ -174,7 +165,7 @@ export class CodexAppServer extends EventEmitter {
     if (message.id !== undefined && message.method) {
       const key = String(message.id);
       if (!this.serverRequests.has(key) && this.serverRequests.size >= this.maxServerRequests) {
-        try { this.#send({ id: message.id, error: { code: -32001, message: 'Web client server-request capacity reached; retry later.' } }); } catch { /* child failure is handled separately */ }
+        try { this.#send({ id: message.id, error: { code: -32001, message: 'Web client server-request capacity reached; retry later.' } }); } catch { /* handled by child lifecycle */ }
         this.emit('protocolError', { message: 'Codex server-request capacity reached', method: message.method });
         return;
       }
@@ -276,9 +267,7 @@ export class CodexAppServer extends EventEmitter {
     this.child = null;
     if (child && child.exitCode === null && !child.killed) {
       child.kill('SIGTERM');
-      const force = setTimeout(() => {
-        if (child.exitCode === null) child.kill('SIGKILL');
-      }, 4_000);
+      const force = setTimeout(() => { if (child.exitCode === null) child.kill('SIGKILL'); }, 4_000);
       force.unref();
       child.once('exit', () => clearTimeout(force));
     }

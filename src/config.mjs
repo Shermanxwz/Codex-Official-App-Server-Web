@@ -24,6 +24,10 @@ function choice(name, fallback, allowed) {
   return allowed.includes(value) ? value : fallback;
 }
 
+function allowedList(name, allowed) {
+  return list(name).filter((value) => allowed.includes(value));
+}
+
 const home = os.homedir();
 const stateHome = process.env.XDG_STATE_HOME || path.join(home, '.local', 'state');
 const configHome = process.env.XDG_CONFIG_HOME || path.join(home, '.config');
@@ -41,6 +45,9 @@ export const config = Object.freeze({
   token: process.env.CWEB_TOKEN || '',
   accessProfile: choice('CWEB_ACCESS_PROFILE', 'full', ['read', 'coding', 'admin', 'full']),
   notificationOptOut: list('CWEB_NOTIFICATION_OPT_OUT'),
+  mcpAppsEnabled: bool('CWEB_MCP_APPS', true),
+  mcpAppPermissions: allowedList('CWEB_MCP_APP_PERMISSIONS', ['camera', 'microphone', 'geolocation', 'clipboardWrite']),
+  dynamicToolsFile: process.env.CWEB_DYNAMIC_TOOLS_FILE ? path.resolve(process.env.CWEB_DYNAMIC_TOOLS_FILE) : '',
   rpcTimeoutMs: integer('CWEB_RPC_TIMEOUT_MS', 600_000, 1_000, 3_600_000),
   bodyLimit: integer('CWEB_BODY_LIMIT', 2 * 1024 * 1024, 16 * 1024, 32 * 1024 * 1024),
   maxPendingRpc: integer('CWEB_MAX_PENDING_RPC', 64, 1, 512),

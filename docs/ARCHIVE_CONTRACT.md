@@ -1,63 +1,46 @@
-# Archive Contract
+# Archive Contract — v0.4.0
 
-This document defines what `ARCHIVE_READY` means for Codex App Server Web.
+This document defines what “final archive” means for this repository.
 
-## Stable protocol contract
+## Frozen baseline
 
-The production default is the stable official Codex App Server protocol. On startup the gateway asks the installed official `codex` executable to generate both:
+- application version: `0.4.0`
+- Node.js: `>=22.12.0`
+- validated official Codex: `@openai/codex 0.149.1`
+- product transport: `codex app-server --listen stdio://`
+- runtime npm dependencies: zero
+- MCP Apps protocol: stable `2026-01-26`
 
-- JSON Schema exports (`generate-json-schema`), and
-- TypeScript exports (`generate-ts`).
+A deployment intended to remain unchanged should pin the validated Codex version. The latest-Codex workflow is an advisory drift detector, not a promise of compatibility with unknown future releases.
 
-For all four protocol directions, the JSON Schema is the authoritative current wire method set. Every JSON wire method must also be present in the independent TypeScript export; a missing TypeScript counterpart fails closed with `OFFICIAL_PROTOCOL_EXPORT_DRIFT`. TypeScript-only legacy/type exports are recorded for diagnostics but do not enlarge the browser wire allow-list.
+## Required closure evidence
 
-Every stable client method in the authoritative JSON wire set is represented by the Web protocol surface. `initialize` and `initialized` are counted as implemented but are gateway-managed lifecycle messages; the browser cannot send a second handshake.
+A sealed source tree must pass:
 
-The JSON parameter schema is exposed on demand for the generic Official APIs surface. The gateway intentionally does not pretend to be a second implementation of Codex parameter semantics: raw parameters are ultimately validated by the official App Server. This also means an upstream JSON-schema field omission does not force the gateway to strip an otherwise valid field supplied in raw JSON.
+1. `npm ci --ignore-scripts`
+2. `npm run manifest:verify`
+3. `npm test`
+4. `npm run check`
+5. pinned stable official schema/protocol seal
+6. pinned experimental official protocol seal
+7. latest stable+experimental advisory canary
 
-## Server-to-client contract
+The CI-tested pull-request head tree and the squash-merged `main` tree must be byte-identical even though their commit SHAs differ.
 
-Every stable official server request/notification method is admitted only when present in the loaded official exports. Unknown server methods are rejected or suppressed and surfaced as a protocol mismatch rather than silently treated as supported.
+## Official-interface rule
 
-Core human approvals (commands and file changes) have native UI. Other official server requests have a generic JSON response surface. Some server requests inherently require host capabilities outside a pure browser client (for example platform attestation or a client-managed external auth-token provider). The project does not bypass Codex or read `auth.json` merely to auto-fulfil those requests.
+The gateway may invoke only methods present in the installed official App Server schema. It does not maintain a handwritten ClientRequest allow-list. Browser-originated requests pass schema, access-profile and origin/auth gates.
 
-Therefore:
+Server-initiated requests require an explicit disposition. Unknown official evolution is fail-closed. Platform-only token refresh and attestation are rejected instead of emulated.
 
-- **stable wire/API method coverage:** required to be 100%;
-- **core Codex workflow UI:** required to be native and bilingual;
-- **host-specific external capabilities:** represented through the official protocol, but only automated when they can be implemented without violating the trust boundary.
+## Host rule
 
-## Isolation contract
+MCP Apps and Dynamic Tools are client-host responsibilities delegated by official protocols, not private backend replacements. MCP Apps are stable and capability-negotiated. Dynamic Tool injection and `currentTime/read` are experimental and require experimental mode.
 
-- The gateway starts a separate `codex app-server --listen stdio://` child.
-- All `CWEB_*` environment variables, including the Web access token, are removed before any Codex subprocess launch.
-- The gateway never scans for or kills unrelated Codex processes.
-- Project-owned state stays outside `CODEX_HOME`.
-- Official config/filesystem/account mutation methods may mutate Codex state **through Codex itself**. This is not a direct gateway write.
-- `ARCHIVE_READY` does not promise byte-for-byte immutability of official Codex's own authentication or session files; official Codex and other clients may refresh/journal their own state. The gateway's guarantee is no direct ownership or write path to those files.
+## Non-interference rule
 
-## Availability contract
+The repository does not directly own Codex credentials/config/session files, install or upgrade Codex, call private ChatGPT backend endpoints, or kill unrelated Codex processes.
 
-- Unexpected App Server exit clears stale server-request IDs and is automatically retried with bounded exponential backoff.
-- Browser SSE clients have bounded buffered output. Slow clients are disconnected rather than allowed to grow server memory without limit.
-- RPC count, App Server stdin buffering, JSONL line size, HTTP request body size, and browser event size are bounded.
-- Browser reconnect performs an authoritative thread/list/thread-read resynchronization rather than replaying uncertain writes.
-- Existing stored threads are resumed through official `thread/resume` before a new turn is started when required.
+## Verification limitation
 
-## Reproducibility contract
-
-- Runtime npm dependencies remain zero.
-- GitHub Actions are pinned to exact action commit SHAs.
-- The required protocol CI job uses an explicit known-good official Codex version.
-- A separate `latest` job is advisory and may fail without invalidating an already sealed archive version.
-- `SOURCE_MANIFEST.sha256` must match every tracked source/artifact file covered by the manifest.
-
-## Final target-host seal
-
-Hosted CI cannot prove the state of the user's real Linux account, ChatGPT/Codex login, filesystem, or locally installed Codex binary. Final archive readiness therefore requires running on the target host:
-
-```bash
-npm run seal
-```
-
-Only that command, on the target machine with the real official Codex login, is allowed to print `ARCHIVE_READY`.
+Repository CI can verify official schema generation, process protocol, sandbox/host logic and fake-App-Server end-to-end behavior without user secrets. A real authenticated model turn necessarily depends on credentials on the deployment machine and is not claimed unless actually executed there.

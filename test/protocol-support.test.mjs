@@ -19,34 +19,50 @@ test('archive support registry covers every current first-class Codex item dispo
 
 test('all declared ServerRequest methods have one explicit trust/UI disposition', () => {
   const entries = Object.entries(SERVER_REQUEST_SUPPORT);
-  assert.equal(entries.length, 10);
+  assert.equal(entries.length, 11);
   assert.equal(new Set(entries.map(([method]) => method)).size, entries.length);
   assert.deepEqual(new Set([...NATIVE_SERVER_REQUESTS, ...MANUAL_SERVER_REQUESTS, ...PLATFORM_ONLY_SERVER_REQUESTS]), new Set(entries.map(([method]) => method)));
   assert.equal(PLATFORM_ONLY_SERVER_REQUESTS.includes('attestation/generate'), true);
   assert.equal(PLATFORM_ONLY_SERVER_REQUESTS.includes('account/chatgptAuthTokens/refresh'), true);
+  assert.equal(SERVER_REQUEST_SUPPORT['currentTime/read'], 'native-experimental-host');
+  assert.equal(SERVER_REQUEST_SUPPORT['item/tool/call'], 'native-tool-host');
 });
 
-test('published support summary is conservative about MCP Apps hosting', () => {
+test('published support summary advertises only implemented archive hosts', () => {
   const summary = protocolSupportSummary();
   assert.equal(summary.threadItemTypes, 18);
-  assert.equal(summary.serverRequests, 10);
+  assert.equal(summary.serverRequests, 11);
   assert.equal(summary.openaiForm, true);
-  assert.equal(summary.mcpAppsHost, false);
+  assert.equal(summary.mcpAppsHost, true);
+  assert.equal(summary.dynamicToolHost, true);
+  assert.equal(summary.currentTimeHost, true);
+  assert.equal(summary.experimentalProtocolSeal, true);
 });
 
-test('runtime server does not advertise MCP Apps UI without a complete host bridge', () => {
+test('runtime server advertises the implemented MCP Apps profile and gates Dynamic Tools experimentally', () => {
   const server = fs.readFileSync(path.join(root, 'src/server.mjs'), 'utf8');
-  assert.match(server, /'io\.modelcontextprotocol\/ui':\s*undefined/);
-  assert.match(server, /mcpAppsAdvertised:\s*false/);
-  assert.match(server, /extensions:\s*\{\s*'openai\/form':\s*\{\},?\s*\}/s);
-  assert.doesNotMatch(server, /'io\.modelcontextprotocol\/ui':\s*\{\s*mimeTypes/);
+  assert.match(server, /MCP_APPS_EXTENSION/);
+  assert.match(server, /mimeTypes:\s*\[MCP_APPS_MIME\]/);
+  assert.match(server, /mcpAppsDoubleIframeSandbox:\s*true/);
+  assert.match(server, /CWEB_DYNAMIC_TOOLS_FILE requires CWEB_EXPERIMENTAL=1/);
+  assert.match(server, /properties\?\.dynamicTools/);
+  assert.match(server, /message\.method === 'currentTime\/read'/);
+});
+
+test('MCP Apps host bridge covers stable server tool/resource proxy surfaces', () => {
+  const host = fs.readFileSync(path.join(root, 'public/mcp-app-host.js'), 'utf8');
+  for (const method of ['ui/initialize', 'tools/list', 'tools/call', 'resources/list', 'resources/templates/list', 'resources/read', 'ui/open-link', 'ui/request-display-mode']) {
+    assert.match(host, new RegExp(method.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+  assert.match(host, /originCallId/);
+  assert.match(host, /toolVisibleToApp/);
+  assert.match(host, /mcpServer\/resource\/read/);
+  assert.match(host, /mcpServer\/tool\/call/);
 });
 
 test('legacy and v2 approval decision vocabularies remain separate', () => {
   const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
-  for (const decision of ['approved', 'approved_for_session', 'accept', 'acceptForSession']) {
-    assert.match(app, new RegExp(`decision\\s*:\\s*['\"]${decision}['\"]`), decision);
-  }
+  for (const decision of ['approved', 'approved_for_session', 'accept', 'acceptForSession']) assert.match(app, new RegExp(`decision\\s*:\\s*['\"]${decision}['\"]`), decision);
   assert.match(app, /action\s*:\s*['\"]accept['\"]\s*,\s*content\s*:/);
   assert.match(app, /_meta\s*:\s*null/);
 });

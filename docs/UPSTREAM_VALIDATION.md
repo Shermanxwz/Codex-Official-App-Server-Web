@@ -1,39 +1,11 @@
-# Upstream validation snapshot
+# Upstream Validation — v0.4.0
 
-Archive hardening was reviewed on 2026-08-24 against the official OpenAI Codex App Server sources and a current official package baseline.
+The archive baseline is official `@openai/codex 0.149.1`.
 
-## Required reproducible baseline
+CI installs that exact version twice: one blocking stable seal and one blocking experimental seal. Both regenerate App Server JSON Schema and TypeScript from the installed binary. The stable seal verifies the public stable protocol; the experimental seal verifies the extra experimental ServerRequest disposition plus `thread/start.dynamicTools` availability.
 
-CI pins:
+A scheduled/push advisory job installs `@openai/codex@latest` and runs both stable and experimental protocol seals. It is intentionally non-blocking for the archived baseline: upstream future drift should be visible without retroactively invalidating a previously sealed, pinned deployment.
 
-```text
-@openai/codex 0.149.1
-```
+The project also follows the stable MCP Apps `2026-01-26` contract for the Host capabilities it declares. The Web host uses official App Server MCP proxy methods rather than opening separate MCP transports from the browser.
 
-This is a compatibility baseline, not a product-managed Codex dependency: the Web application never installs or upgrades Codex at runtime. The CI-only pinned job proves a known-good official protocol snapshot; a separate advisory job tests `@openai/codex@latest`.
-
-## Official source snapshot observed during the review
-
-OpenAI `openai/codex` `main` was inspected at commit:
-
-```text
-80cce09d059780528e59353ab3d87e4c97d1e944
-```
-
-The architecture was checked against official App Server behavior/schema layout:
-
-- App Server is the backend intended to power rich Codex interfaces;
-- local JSONL over `stdio` is the production transport used by this project; the network WebSocket listener is experimental/unsupported;
-- `generate-json-schema` and `generate-ts` are version-specific exports from the installed Codex;
-- protocol unions expose fixed method tags that can be converted into exact method sets;
-- experimental methods/fields require explicit opt-in and are excluded from the stable archive contract.
-
-## Runtime authority
-
-A deployed instance does **not** trust this documentation snapshot to admit RPCs. The locally installed official Codex executable remains authoritative: the gateway generates its JSON and TypeScript exports, requires JSON wire methods to be covered by the TypeScript export while recording TypeScript-only legacy/type exports, records exact version/digest, then gates traffic against those artifacts.
-
-A future official release can therefore produce one of three outcomes:
-
-1. compatible stable exports -> startup/seal passes;
-2. new stable methods -> they become available through the schema-driven Official APIs surface automatically;
-3. inconsistent/breaking exports -> the gateway fails closed until the compatibility issue is understood.
+No statement in this document means that private ChatGPT product APIs are part of the public App Server compatibility target.

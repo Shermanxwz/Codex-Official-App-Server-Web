@@ -1,68 +1,43 @@
-# Security Model
+# Security
 
-This application is equivalent to privileged remote interactive access to the Codex account and host workspaces. Treat Web access as highly privileged.
+## Network and browser boundary
 
-## Defaults
+Authentication is on by default. Non-loopback bind without authentication is refused. State-changing Web API calls require an exact same-origin check. `CWEB_PUBLIC_ORIGIN`, when set, must be an exact HTTP(S) origin.
 
-- Authentication is required by default.
-- The server binds to `127.0.0.1` by default.
-- A non-loopback bind is refused when app authentication is disabled.
-- JSON mutation endpoints accept only `application/json` or `application/*+json`.
-- State-changing requests require exact same Origin or exact configured `CWEB_PUBLIC_ORIGIN`.
-- `CWEB_PUBLIC_ORIGIN` must be a bare HTTP(S) origin without path/query/hash/credentials.
-- Session cookies are HttpOnly and SameSite=Strict; with HTTPS public origin they are Secure.
-- Login attempts are rate limited.
-- Static responses use CSP, no-sniff, frame denial and no-referrer headers.
+The product page uses a restrictive CSP and allows `frame-src data:` only for the MCP Apps Sandbox Proxy. The page itself remains non-frameable (`frame-ancestors 'none'`, `X-Frame-Options: DENY`).
 
-## Browser-to-Codex protocol gate
+## MCP Apps
 
-The browser cannot submit an arbitrary JSON-RPC method name. A client request/notification must exist in the official stable schema exported by the installed Codex. Connection lifecycle methods are gateway-managed to prevent duplicate initialization.
+MCP App HTML is untrusted.
 
-The reverse direction is also gated: a server request or notification that is not present in the current official server-side export is not blindly forwarded. Unknown server requests are failed closed so they cannot remain pending invisibly.
+- Web rendering uses the spec-required intermediate Sandbox Proxy on a different opaque origin.
+- The inner App iframe follows the stable reference sandbox profile (`allow-scripts allow-same-origin allow-forms`). Its same-origin relationship is only with the already isolated outer proxy; it is never same-origin with the product Host page. Popups, top-navigation, downloads and unsandboxed escape flags remain absent.
+- App CSP is generated from `_meta.ui.csp`; undeclared external connections/frames are denied. The sandbox follows the stable reference compatibility profile, including same-origin/inline/eval/blob allowances inside the already isolated sandbox origin; those allowances never apply to the product Host page.
+- Powerful browser permissions are disabled unless explicitly allowed with `CWEB_MCP_APP_PERMISSIONS` and requested by the resource; browser secure-context and Permissions Policy enforcement may still deny them.
+- postMessage traffic is source/origin-checked, JSON-RPC checked and size-bounded; initialization ordering and per-session request concurrency are bounded.
+- App tool calls are scoped to the originating MCP server and blocked when tool visibility excludes `app`; inventories/caches/list pages also have cardinality bounds.
+- External links are host-mediated and require user confirmation. `downloadFile` is not advertised; sandboxed Apps cannot assume host file-download support.
 
-## Dual-export fail-closed rule
+## Dynamic Tool Host
 
-The gateway generates both official JSON Schema and TypeScript exports. Every JSON wire method must also exist in the TypeScript export. If TypeScript is missing a JSON wire method, startup fails closed. TypeScript-only legacy/type exports are recorded as diagnostics but are not exposed as current wire methods.
+Dynamic Tools are operator-defined executable integrations and require experimental mode.
 
-## Secret isolation
+- executable command and cwd must be absolute;
+- `spawn` always uses `shell:false`;
+- model arguments travel only over stdin JSON;
+- process environment is minimal, with explicit `inheritEnv` allow-list entries;
+- every `CWEB_*` name is forbidden from Dynamic Tool inheritance;
+- config size/count, request size, runtime, stdout and returned content are bounded;
+- image/audio outputs must be inline base64 data URLs.
 
-`CWEB_TOKEN` and every other `CWEB_*` variable are stripped before spawning Codex processes. This includes `codex --version`, schema generators and the long-lived `codex app-server`. The agent/runtime therefore does not inherit the Web access credential from this application.
+A Dynamic Tool executable itself is trusted operator code. The host does not claim to sandbox arbitrary native executables beyond the process/environment/resource boundary above; use OS/container isolation if a handler is not trusted.
 
-The application does not read `auth.json` to implement UI features and does not send ChatGPT access tokens to the browser.
+## Codex non-interference
 
-## Resource and availability boundaries
+The gateway never directly reads or writes Codex `auth.json`, `config.toml` or rollout/session files. It does not install/upgrade Codex, and it never uses process-wide kill commands. All `CWEB_*` variables are stripped from the Codex App Server environment.
 
-The service applies bounded limits to:
+Platform-only `account/chatgptAuthTokens/refresh` and `attestation/generate` are rejected from the browser boundary rather than emulated.
 
-- request body size;
-- pending Codex RPC count;
-- queued App Server stdin bytes;
-- App Server JSONL record size;
-- individual browser events;
-- slow-client SSE buffering.
+## Resource bounds
 
-An unexpected App Server exit rejects outstanding calls, clears stale approvals and is recovered with bounded exponential restart. Fatal startup configuration/schema errors do not enter an infinite systemd restart loop.
-
-## Recommended remote access
-
-Keep `CWEB_HOST=127.0.0.1` and place the application behind a trusted layer such as Tailscale, an authenticated HTTPS reverse proxy or an SSH tunnel. Do not router-forward the raw HTTP port to the public Internet.
-
-## Codex ownership boundary
-
-The source tree is checked for direct credential/config ownership patterns, private ChatGPT backend calls, Codex installer/upgrader behavior and process-wide kill commands. The gateway manages only its own official App Server child.
-
-The application intentionally does **not** forbid a user from invoking an official state-changing method that exists in the stable schema. If upstream exposes config/file/account mutations, invoking them from the Official APIs panel is an explicit request routed through Codex.
-
-Some official server requests may require a hosting capability that this standalone Web gateway deliberately does not possess (for example, an external platform-managed credential refresh or attestation provider). Such requests are surfaced/failed explicitly; the project will not violate the no-direct-credential boundary merely to claim automatic handling.
-
-## Experimental APIs
-
-Experimental protocol support is opt-in. Do not enable `CWEB_EXPERIMENTAL=1` on a sealed deployment unless you accept upstream compatibility risk.
-
-## Source/release integrity
-
-`SOURCE_MANIFEST.sha256` covers the repository's regular source/artifact files (excluding generated/runtime state). CI verifies the manifest before tests. Required CI also validates against a fixed known-good Codex version while an advisory job checks current `latest` compatibility.
-
-## Disclosure
-
-If you find a vulnerability, do not publish access tokens, Codex credentials, workspace data or live exploit details. Report a minimal reproduction with the affected commit/version.
+Pending RPCs/ServerRequests, App Server stdin, JSONL records, HTTP bodies, SSE slow-client buffers, event frames, sessions, rate-limit keys, MCP App messages/resources/inventories, and Dynamic Tool runtime/output are bounded.

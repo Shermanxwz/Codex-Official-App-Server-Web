@@ -1,77 +1,45 @@
-# Protocol Parity Seal
+# Protocol Parity Seal — v0.4.0
 
-This document defines the archive-grade Web parity boundary for Codex App Server Web.
+## Authority
 
-## Source of truth
+The installed official `codex` binary is the protocol authority. The gateway generates both JSON Schema and TypeScript with `codex app-server generate-json-schema` and `generate-ts`; JSON wire methods not covered by the TypeScript export fail closed.
 
-The gateway does not maintain a handwritten RPC allow-list. At runtime and in CI it generates the official protocol from the installed `codex` binary with:
+Archive baseline: `@openai/codex 0.149.1`.
 
-```text
-codex app-server generate-json-schema
-codex app-server generate-ts
-```
+## Stable surface
 
-JSON wire methods and TypeScript exports are cross-checked and tied to the exact Codex version/schema digest.
+All exported stable ClientRequest/ClientNotification methods are schema-gated. `initialize`/`initialized` are gateway-managed; remaining allowed methods are invocable through native UX or the Official APIs drawer.
 
-## ThreadItem UI coverage
+The first-class timeline has an explicit disposition for every sealed official ThreadItem variant: `userMessage`, `hookPrompt`, `agentMessage`, `plan`, `reasoning`, `commandExecution`, `fileChange`, `mcpToolCall`, `dynamicToolCall`, `collabAgentToolCall`, `subAgentActivity`, `webSearch`, `imageView`, `sleep`, `imageGeneration`, `enteredReviewMode`, `exitedReviewMode`, `contextCompaction`.
 
-The Web timeline has an explicit first-class disposition for every currently known official `ThreadItem` variant:
-
-- `userMessage`
-- `hookPrompt`
-- `agentMessage`
-- `plan`
-- `reasoning`
-- `commandExecution`
-- `fileChange`
-- `mcpToolCall`
-- `dynamicToolCall`
-- `collabAgentToolCall`
-- `subAgentActivity`
-- `webSearch`
-- `imageView`
-- `sleep`
-- `imageGeneration`
-- `enteredReviewMode`
-- `exitedReviewMode`
-- `contextCompaction`
-
-The sealed UI keeps raw streaming text separately from rendered DOM, so code-block controls cannot corrupt later deltas. `item/started` and `item/completed` are always reconciled inside their authoritative Turn block.
-
-## ServerRequest coverage
+## ServerRequest dispositions
 
 | Method | Disposition |
 | --- | --- |
-| `item/commandExecution/requestApproval` | Native Web approval |
-| `item/fileChange/requestApproval` | Native Web approval |
-| `item/tool/requestUserInput` | Native question UI |
-| `mcpServer/elicitation/request` | Native form/URL elicitation |
-| `item/permissions/requestApproval` | Native permission UI |
-| `item/tool/call` | Structured manual tool-host response |
-| `applyPatchApproval` | Native legacy approval vocabulary |
-| `execCommandApproval` | Native legacy approval vocabulary |
-| `account/chatgptAuthTokens/refresh` | Platform-only; rejected from browser boundary |
-| `attestation/generate` | Platform-only; not advertised and rejected |
+| `item/commandExecution/requestApproval` | native Web approval |
+| `item/fileChange/requestApproval` | native Web approval |
+| `item/tool/requestUserInput` | native user-input UI |
+| `mcpServer/elicitation/request` | native MCP elicitation UI |
+| `item/permissions/requestApproval` | native permission UI |
+| `item/tool/call` | configured native Dynamic Tool Host; manual fallback if unmatched |
+| `account/chatgptAuthTokens/refresh` | platform-only; rejected |
+| `attestation/generate` | platform-only; rejected and not advertised |
+| `currentTime/read` | experimental native clock host |
+| `applyPatchApproval` | native legacy approval |
+| `execCommandApproval` | native legacy approval |
 
-V2 approval decisions and legacy `ReviewDecision` values are deliberately separate. MCP elicitation responses always include the official `action`, `content`, and `_meta` fields.
+## MCP Apps
 
-## Capability honesty
+Stable MCP Apps hosting is real, not a capability stub. The client declares `io.modelcontextprotocol/ui` with MIME `text/html;profile=mcp-app`, uses the stable `2026-01-26` double-iframe sandbox architecture, and proxies resource/tool inventory and calls through official App Server MCP methods. Optional MCP Apps capabilities that are not implemented are not advertised.
 
-The Web client advertises `openai/form`, which it implements.
+## Experimental surface
 
-It does **not** advertise `io.modelcontextprotocol/ui` / MCP Apps hosting. A compliant MCP Apps host requires a sandboxed iframe plus the complete bidirectional host bridge and authorization/audit semantics; rendering an arbitrary HTML resource is not sufficient. Until that host exists, claiming the extension would be a false capability declaration.
+`CWEB_EXPERIMENTAL=1` asks Codex to export/accept experimental protocol. The experimental seal separately regenerates the protocol and requires `currentTime/read` plus `thread/start.dynamicTools` on the pinned archive baseline. Dynamic Tool auto-host configuration is refused in stable mode.
 
-`requestAttestation` is not advertised. Attestation and ChatGPT auth-token refresh requests stay outside the browser trust boundary.
+## Drift behavior
 
-## Future-drift seal
+Pinned stable and pinned experimental jobs are blocking archive checks. A latest-version job runs both modes as an advisory canary. New official ThreadItem or ServerRequest surface without a declared disposition makes the corresponding protocol seal fail instead of silently degrading.
 
-`npm run seal:core` also runs `scripts/protocol-seal.mjs`. It regenerates the official stable protocol and fails when:
+## Outside the parity boundary
 
-1. the official Codex release contains a `ThreadItem` variant that has no declared Web disposition; or
-2. the official Codex release contains a `ServerRequest` method that has no declared trust/UI disposition.
-
-The pinned CI job protects the archived baseline. The latest-version advisory job acts as an upstream canary, so new official protocol surface is detected before it silently becomes a UI bug.
-
-## Non-goals
-
-This project targets official `codex app-server` parity, not private ChatGPT Desktop internals. It does not call private ChatGPT backend endpoints, does not scrape a terminal UI, and does not directly own or mutate Codex authentication/config state files.
+Private ChatGPT backend endpoints, external-host ChatGPT auth-token refresh and attestation are not emulated. The project is parity with the public official Codex App Server contract and its host responsibilities, not a bit-for-bit clone of private ChatGPT product internals.
