@@ -45,24 +45,24 @@ if(args[0]==='--version'){console.log('codex-cli 9.9.9-active-writer-test');proc
 if(args[0]==='app-server'&&args[1]==='generate-json-schema'){
  const out=args[args.indexOf('--out')+1];require('node:fs').mkdirSync(out,{recursive:true});
  const variant=(method,ref)=>({title:method,properties:{id:{},method:{enum:[method]},params:{$ref:'#/definitions/'+ref}},required:['id','method','params']});
- const req={definitions:{InitializeParams:{type:'object'},ThreadReadParams:{type:'object'},ThreadResumeParams:{type:'object'}},oneOf:[variant('initialize','InitializeParams'),variant('thread/read','ThreadReadParams'),variant('thread/resume','ThreadResumeParams')]};
+ const req={definitions:{InitializeParams:{type:'object'},ThreadReadParams:{type:'object'},ThreadResumeParams:{type:'object'},ThreadArchiveParams:{type:'object'}},oneOf:[variant('initialize','InitializeParams'),variant('thread/read','ThreadReadParams'),variant('thread/resume','ThreadResumeParams'),variant('thread/archive','ThreadArchiveParams')]};
  const empty={definitions:{},oneOf:[]};
  for(const [name,data] of [['ClientRequest.json',req],['ClientNotification.json',empty],['ServerRequest.json',empty],['ServerNotification.json',empty]])require('node:fs').writeFileSync(require('node:path').join(out,name),JSON.stringify(data));process.exit(0);
 }
 if(args[0]==='app-server'&&args[1]==='generate-ts'){
  const out=args[args.indexOf('--out')+1];require('node:fs').mkdirSync(out,{recursive:true});
- require('node:fs').writeFileSync(require('node:path').join(out,'ClientRequest.ts'),'export type ClientRequest={"method":"initialize"}|{"method":"thread/read"}|{"method":"thread/resume"};');
+ require('node:fs').writeFileSync(require('node:path').join(out,'ClientRequest.ts'),'export type ClientRequest={"method":"initialize"}|{"method":"thread/read"}|{"method":"thread/resume"}|{"method":"thread/archive"};');
  for(const name of ['ClientNotification.ts','ServerRequest.ts','ServerNotification.ts'])require('node:fs').writeFileSync(require('node:path').join(out,name),'export type Empty=never;');
  process.exit(0);
 }
 if(args[0]==='app-server'){
  const rl=readline.createInterface({input:process.stdin});
- rl.on('line',line=>{const m=JSON.parse(line);if(m.method==='initialize')return console.log(JSON.stringify({id:m.id,result:{codexHome:'/fake',platformFamily:'unix',platformOs:'linux'}}));if(m.method==='initialized')return;if(m.method==='thread/read')return console.log(JSON.stringify({id:m.id,result:{thread:{id:'thread-1',turns:[]}}}));if(m.method==='thread/resume')return console.log(JSON.stringify({id:m.id,error:{code:-32600,message:'thread thread-1 already has an active writer'}}));if(m.id!==undefined)console.log(JSON.stringify({id:m.id,result:{}}));});return;
+ rl.on('line',line=>{const m=JSON.parse(line);if(m.method==='initialize')return console.log(JSON.stringify({id:m.id,result:{codexHome:'/fake',platformFamily:'unix',platformOs:'linux'}}));if(m.method==='initialized')return;if(m.method==='thread/read')return console.log(JSON.stringify({id:m.id,result:{thread:{id:'thread-1',turns:[]}}}));if(m.method==='thread/resume'||m.method==='thread/archive')return console.log(JSON.stringify({id:m.id,error:{code:-32600,message:'thread thread-1 already has an active writer'}}));if(m.id!==undefined)console.log(JSON.stringify({id:m.id,result:{}}));});return;
 }
 process.exit(2);
 `,{mode:0o755}); return file;
 }
-async function waitReady(url, child){for(let i=0;i<80;i++){if(child.exitCode!==null)throw new Error(`server exited ${child.exitCode}`);try{const r=await fetch(`${url}/readyz`);if(r.status===200)return;}catch{}await new Promise(r=>setTimeout(r,50));}throw new Error('server/app-server did not become ready');}
+async function waitReady(url, child){let logs='';child.stderr?.on('data',x=>logs+=x);child.stdout?.on('data',x=>logs+=x);for(let i=0;i<80;i++){if(child.exitCode!==null)throw new Error(`server exited ${child.exitCode}\n${logs}`);try{const r=await fetch(`${url}/readyz`);if(r.status===200)return;}catch{}await new Promise(r=>setTimeout(r,50));}throw new Error(`server/app-server did not become ready\n${logs}`);}
 
 test('full HTTP gateway admits only methods exported by official schema', async(t)=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cweb-http-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
@@ -102,4 +102,22 @@ test('active-writer resume is a read-only conflict, never an HTTP 502', async(t)
   assert.equal(resume.status,409,logs); const conflict=await resume.json(); assert.equal(conflict.error,'THREAD_READ_ONLY'); assert.match(conflict.message,/只读/);
   const read=await fetch(`${url}/api/rpc`,{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'thread/read',params:{threadId:'thread-1',includeTurns:false}})});
   assert.equal(read.status,200,logs); assert.equal((await read.json()).result.thread.id,'thread-1');
+  const archive=await fetch(`${url}/api/rpc`,{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'thread/archive',params:{threadId:'thread-1'}})});
+  assert.equal(archive.status,409,logs); assert.equal((await archive.json()).error,'THREAD_READ_ONLY');
+});
+
+test('Web write control blocks mutations while preserving official reads', async(t)=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cweb-write-control-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const codex=fakeActiveWriterCodex(dir); const port=await getFreePort(); const url='http://127.0.0.1:'+port; const token='write-control-test-token'; let logs='';
+  const child=spawn(process.execPath,['src/server.mjs'],{cwd:root,env:{...process.env,CWEB_CODEX_BIN:codex,CWEB_STATE_DIR:path.join(dir,'state'),CWEB_WORKSPACE:dir,CWEB_HOST:'127.0.0.1',CWEB_PORT:String(port),CWEB_REQUIRE_AUTH:'1',CWEB_TOKEN:token,CWEB_MCP_APPS:'0'},stdio:['ignore','pipe','pipe']});
+  child.stdout.on('data',x=>logs+=x); child.stderr.on('data',x=>logs+=x); t.after(()=>{if(child.exitCode===null)child.kill('SIGTERM')});
+  await waitReady(url,child); const origin=url; const login=await fetch(url+'/api/login',{method:'POST',headers:{'content-type':'application/json',origin},body:JSON.stringify({token})}); assert.equal(login.status,200,logs); const cookie=login.headers.get('set-cookie').split(';',1)[0];
+  const initial=await (await fetch(url+'/api/control',{headers:{cookie}})).json(); assert.equal(initial.control.webWriteEnabled,true); assert.equal(initial.control.desktopWriteProtection,true);
+  const off=await fetch(url+'/api/control',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({webWriteEnabled:false})}); assert.equal(off.status,200,logs); assert.equal((await off.json()).control.webWriteEnabled,false);
+  const read=await fetch(url+'/api/rpc',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'thread/read',params:{threadId:'thread-1',includeTurns:false}})}); assert.equal(read.status,200,logs);
+  const methods=await (await fetch(url+'/api/methods',{headers:{cookie}})).json(); assert.equal(methods.requests.find(item=>item.method==='thread/read').allowed,true); assert.equal(methods.requests.find(item=>item.method==='thread/resume').allowed,false);
+  const blocked=await fetch(url+'/api/rpc',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'thread/resume',params:{threadId:'thread-1'}})}); assert.equal(blocked.status,403,logs); assert.equal((await blocked.json()).error,'WEB_WRITE_DISABLED');
+  const on=await fetch(url+'/api/control',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({webWriteEnabled:true})}); assert.equal(on.status,200,logs);
+  const conflict=await fetch(url+'/api/rpc',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'thread/resume',params:{threadId:'thread-1'}})}); assert.equal(conflict.status,409,logs); assert.equal((await conflict.json()).error,'THREAD_READ_ONLY');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dir,'state','control.json'),'utf8')).webWriteEnabled,true);
 });

@@ -39,18 +39,36 @@
       </label>
 
       <div class="section-label">
-        <span data-i18n="recents">最近</span>
+        <span id="threadSectionLabel" data-i18n="recents">最近</span>
         <button id="refreshThreads" class="tiny-button" type="button" data-i18n-title="reload" title="刷新">↻</button>
       </div>
       <div id="threadList" class="thread-list" role="list"></div>
 
       <div class="sidebar-footer">
+        <button id="archivedThreads" class="nav-button" type="button" aria-pressed="false">
+          <span aria-hidden="true">▣</span><span id="archivedThreadsLabel" data-i18n="archivedThreads">已归档</span>
+        </button>
         <button id="fullHistoryButton" class="nav-button history-mode-button hidden" type="button" aria-pressed="false">
           <span aria-hidden="true">◫</span><span id="fullHistoryLabel" data-i18n="fullHistory">历史完整会话</span>
         </button>
         <button id="openProtocol" class="nav-button" type="button">
           <span>⌘</span><span data-i18n="protocol">官方接口</span>
         </button>
+        <section id="writeControls" class="sidebar-control-panel" aria-label="写入控制">
+          <div class="sidebar-control-heading">
+            <span data-i18n="writeControls">写入控制</span>
+            <small id="controlPolicyState"></small>
+          </div>
+          <button id="webWriteToggle" class="sidebar-switch" type="button" role="switch" aria-checked="true">
+            <span><span class="sidebar-switch-dot" aria-hidden="true"></span><span data-i18n="webWriteToggle">网页写入</span></span>
+            <strong id="webWriteState">开</strong>
+          </button>
+          <button id="desktopGuardToggle" class="sidebar-switch" type="button" role="switch" aria-checked="true">
+            <span><span class="sidebar-switch-dot" aria-hidden="true"></span><span data-i18n="desktopGuardToggle">桌面占用保护</span></span>
+            <strong id="desktopGuardState">开</strong>
+          </button>
+          <small class="sidebar-control-note" data-i18n="desktopGuardNote">官方协议不能直接撤销桌面 ChatGPT 的写入权限；此开关控制网页安全协调。</small>
+        </section>
         <div class="sidebar-footer-row">
           <button id="langToggle" class="nav-button compact" type="button">中 / EN</button>
           <button id="logout" class="nav-button compact" type="button" data-i18n="logout">退出</button>

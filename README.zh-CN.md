@@ -47,9 +47,11 @@ Host 页面
 
 原生界面包括历史/read/resume、官方 `thread/turns/list` 分页与懒加载、侧边栏“历史完整会话”模式、完整历史关键词筛选、实时 Turn/Item、流式 delta、模型与 reasoning、官方 Turn 处理时长、interrupt、命令/文件/权限审批、用户输入、MCP elicitation、断线权威重同步，以及 MCP App 渲染。执行项会像 Codex 一样收进默认折叠的“工作过程”，主回答保持在对话主线上；官方返回非空计划时，计划卡固定在输入框上方，桌面端悬停/聚焦查看步骤，触屏端点击展开；活动 Turn 中继续输入会走官方 `turn/steer` 调整方向，手动上下文整理走官方 `thread/compact/start`，并显示压缩动画。运行中标题、停止按钮、调整方向和上下文仪表均由真实官方 Turn/usage 事件驱动，空闲时不伪造运行状态。其余不常用官方方法仍可在 **官方接口** Drawer 中按当前官方 schema 直接调用。
 
-当前固定的 Codex 官方协议提供 `thread/turns/list`、`thread/items/list` 分页和 `thread/searchOccurrences` 官方全文检索。完整历史模式会沿官方游标读取到结束；搜索以官方 occurrence 索引为主，并补充已经渲染的工作过程文本，不伪造 ChatGPT 私有接口。每一页单独请求，整段会话不会被拼成一条 128 MiB JSONL。普通会话启动时只读最近一页，旧内容按需加载，不会隐式进入完整历史模式。
+共享历史遵循单写入者边界：选择会话和重连恢复只使用官方 `thread/read` 与分页读取，不自动 `thread/resume`；只有明确发送或管理操作时才尝试写入。若桌面官方客户端正在占用会话，网页保持只读，任务结束后通过官方状态探测恢复。侧栏提供默认开启的“网页写入”和“桌面占用保护”开关；后者只控制网页安全协调，官方协议不提供直接撤销桌面 ChatGPT 写入权限的接口。会话菜单使用官方 `thread/name/set`、`thread/archive`、`thread/unarchive`、`thread/delete`，不直接改历史文件。
 
-每次网关启动都会生成运行代际标识，并同时通过 `/api/meta`、SSE `connected` 帧提供。浏览器在 SSE 断线重连、页面重新获得焦点或检测到代际变化时，自动重新连接并用官方 `thread/resume`、分页历史和待处理请求恢复页面，不需要用户再发送一条消息。Linux 安装器把官方 App Server 放在独立的 `codex-official-app-server.service` 中，网关重启不会终止官方 Turn；重连后通过官方权威状态和历史重新接管，断线期间没有缓存的增量不会被伪造重放。若官方 App Server 自身被停止、崩溃或机器关机，操作系统仍会终止正在生成的 Turn；官方协议没有把已被终止的模型生成凭空续跑的接口。
+当前固定的 Codex 官方协议提供 `thread/turns/list`、`thread/items/list` 分页和 `thread/searchOccurrences` 官方全文检索。完整历史模式仍然按页运行：先立即显示最近一页，历史控件吸附在顶部，只有用户明确加载更早内容或搜索命中更早会话段时才继续读取对应分页。搜索以官方 occurrence 索引为主，并补充已经渲染的工作过程文本，不伪造 ChatGPT 私有接口。每一页单独请求，遇到大页还会自动降为更小分页重试，整段会话不会被拼成一条 128 MiB JSONL。普通会话启动时只读最近一页，旧内容按需加载，不会隐式进入完整历史模式。分页消除了“整段会话启动读取”的聚合阈值；但单个异常巨大的官方 Turn 仍可能触发传输安全闸门，需要先由官方压缩上下文。
+
+每次网关启动都会生成运行代际标识，并同时通过 `/api/meta`、SSE `connected` 帧提供。浏览器在 SSE 断线重连、页面重新获得焦点或检测到代际变化时，只用官方权威历史重新读取页面，不会因为恢复页面而抢占桌面会话；`thread/resume` 仅在明确的网页写入动作中调用。若官方返回 active-writer 冲突，网关返回明确的只读状态，网页不会把它伪装成 502。Linux 安装器把官方 App Server 放在独立的 `codex-official-app-server.service` 中，网关重启不会终止官方 Turn；断线期间没有缓存的增量不会被伪造重放。若官方 App Server 自身被停止、崩溃或机器关机，操作系统仍会终止正在生成的 Turn；官方协议没有把已被终止的模型生成凭空续跑的接口。
 
 `CWEB_CODEX_TRANSPORT=websocket` 与 `CWEB_CODEX_SERVER_URL` 控制持久官方传输。WebSocket 端点只接受 loopback `ws(s)` 地址，官方服务单元不接收 Web 会话令牌或其他 `CWEB_*` 配置。`npm start` 未安装独立服务时仍默认为 stdio；要获得重启后继续接管的行为，应使用 `scripts/install-linux.sh` 安装的双服务部署。
 
@@ -92,8 +94,8 @@ npm start
 | `CWEB_MCP_APPS` | `1` | 声明并渲染稳定 MCP Apps 扩展 |
 | `CWEB_MCP_APP_PERMISSIONS` | 空 | 可选权限 allow-list；最终仍受浏览器 secure-context / Permissions Policy 约束 |
 | `CWEB_DYNAMIC_TOOLS_FILE` | 空 | Dynamic Tool Host v1 JSON；要求 `CWEB_EXPERIMENTAL=1` |
-| `CWEB_NOTIFICATION_OPT_OUT` | `turn/diff/updated` | 额外要抑制的 notification；聚合 Diff 始终不进入对话时间线 |
-| `CWEB_STATE_DIR` | XDG state | 项目 schema/cache 状态 |
+| `CWEB_NOTIFICATION_OPT_OUT` | `turn/diff/updated`, `turn/moderationMetadata` | 额外要抑制的 notification；聚合 Diff 和 moderation bookkeeping 始终不进入对话时间线 |
+| `CWEB_STATE_DIR` | XDG state | 项目 schema/cache 与网页写入控制状态；官方会话仍由 Codex Runtime 管理 |
 | `CWEB_SCHEMA_REFRESH` | `1` | 启动时重新生成官方协议 |
 
 MCP Apps 和 Dynamic Tool 的详细契约见 [docs/HOSTS.md](docs/HOSTS.md)。

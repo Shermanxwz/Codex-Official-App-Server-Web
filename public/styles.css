@@ -18,6 +18,10 @@
 @media(max-width:760px){.desktop-only{display:none!important}.mobile-only{display:grid}.shell,.shell.sidebar-collapsed{grid-template-columns:minmax(0,1fr)}.sidebar,.shell.sidebar-collapsed .sidebar{position:fixed;inset:0 auto 0 0;transform:translateX(-102%);box-shadow:var(--shadow);border-right:1px solid var(--line)}.sidebar.open{transform:translateX(0)}.sidebar-scrim{display:block;position:fixed;inset:0;z-index:25;background:rgba(0,0,0,.34)}.topbar{padding:8px 10px}.thread-heading h1{max-width:54vw}.workspace-header{max-width:34vw}.timeline{padding:20px 12px 34px}.message.user .message-bubble{max-width:88%}.composer-wrap{padding:0 10px max(9px,env(safe-area-inset-bottom))}.composer-left{max-width:calc(100vw - 80px);overflow-x:auto}.pill-button{max-width:150px}.pill-select{max-width:125px}.approval-tray{right:10px;bottom:102px;width:calc(100% - 20px)}.drawer{inset:0;width:100vw}.protocol-toolbar,.protocol-grid{grid-template-columns:1fr}.method-list{max-height:190px;border-right:0;border-bottom:1px solid var(--line)}.empty-state{padding-bottom:100px}}
 @media(max-width:480px){.top-actions #reloadThread{display:none}.thread-subline .sep,.workspace-header{display:none}.message{font-size:13px}.activity-subtitle{max-width:54vw}.pill-select{max-width:105px}}
 
+/* Shared-history controls and official thread actions. */
+.thread{position:relative}.thread-row-copy{min-width:0;padding-right:25px}.thread-menu-wrap{position:absolute;top:4px;right:4px;z-index:4}.thread-menu-button{width:24px;height:24px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:11px;letter-spacing:1px;line-height:1}.thread-menu-button:hover,.thread-menu-button:focus-visible{background:var(--hover);color:var(--text)}.thread-menu{position:absolute;top:25px;right:0;min-width:128px;padding:4px;border:1px solid var(--line);border-radius:9px;background:var(--panel);box-shadow:var(--shadow);z-index:40}.thread-menu-action{display:block;width:100%;border:0;border-radius:6px;background:transparent;padding:7px 9px;text-align:left;font-size:11px}.thread-menu-action:hover:not(:disabled){background:var(--hover)}.thread-menu-action.danger{color:var(--bad)}.sidebar-control-panel{margin-top:7px;padding:8px 7px;border:1px solid var(--line);border-radius:10px;background:color-mix(in srgb,var(--panel) 58%,transparent)}.sidebar-control-heading{display:flex;align-items:center;justify-content:space-between;margin:0 2px 5px;color:var(--muted);font-size:10px;font-weight:650}.sidebar-control-heading small{font-size:9px;color:var(--faint)}.sidebar-switch{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:29px;border:0;border-radius:7px;padding:0 6px;background:transparent;font-size:11px;text-align:left}.sidebar-switch>span{display:flex;align-items:center;gap:6px;min-width:0}.sidebar-switch:hover{background:var(--hover)}.sidebar-switch.active .sidebar-switch-dot{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 15%,transparent)}.sidebar-switch.inactive .sidebar-switch-dot{background:var(--faint)}.sidebar-switch strong{font-size:10px;font-weight:600;color:var(--muted)}.sidebar-switch-dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:0 0 auto}.sidebar-control-note{display:block;margin:6px 2px 0;color:var(--faint);font-size:9px;line-height:1.4}.sidebar-footer .nav-button.active{background:var(--panel);border:1px solid var(--line)}
+[data-web-write="off"] .composer-card{border-color:color-mix(in srgb,var(--warn) 35%,var(--line))}.composer-card textarea[readonly]{cursor:not-allowed}
+
 /* UI acceptance fixes: keep long conversations compact and make side surfaces controllable. */
 :root{--content:min(1160px,calc(100vw - var(--sidebar) - 48px));--drawer-width:min(920px,calc(100vw - 300px))}
 .timeline{padding:clamp(20px,2.5vw,42px) max(18px,calc((100% - var(--content))/2)) 42px;overscroll-behavior:contain}
@@ -306,7 +310,8 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
    explicit user action, and the full-history mode is visible in the sidebar. */
 .history-mode-button{color:var(--muted)}
 .history-mode-button.active{background:var(--panel);color:var(--text);border:1px solid var(--line)}
-.history-older-control{display:flex;align-items:center;justify-content:center;width:min(100%,420px);min-height:32px;margin:0 auto 16px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:var(--soft);color:var(--muted);font-size:10px}
+.history-older-control{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:center;width:min(100%,420px);min-height:32px;margin:0 auto 16px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:color-mix(in srgb,var(--bg) 92%,var(--soft));backdrop-filter:blur(12px);color:var(--muted);font-size:10px}
+.history-older-control.with-search{top:46px}
 .history-older-control:hover:not(:disabled){border-color:var(--strong);color:var(--text)}
 .history-older-control:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .history-older-control.loading{cursor:wait}
@@ -315,6 +320,7 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
   .turn-header-detail{display:inline;font-size:9px}
   .history-mode-button{min-height:38px}
   .history-older-control{width:calc(100% - 8px);margin-bottom:12px;font-size:11px}
+  .history-older-control.with-search{top:68px}
 }
 
 /* Full-history search is backed by the official occurrence index (with a

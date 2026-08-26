@@ -19,9 +19,42 @@ const APP_VERSION = '0.4.0';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = path.join(root, 'public');
 const schemaDir = path.join(config.stateDir, config.experimental ? 'schema-experimental' : 'schema-stable');
+const controlFile = path.join(config.stateDir, 'control.json');
 fs.mkdirSync(config.stateDir, { recursive: true, mode: 0o700 });
 const stateMaintenance = pruneStateArtifacts(config.stateDir);
 if (stateMaintenance.removed.length) console.log(`Removed ${stateMaintenance.removed.length} stale schema swap artifact(s)`);
+
+const DEFAULT_CONTROL_STATE = { webWriteEnabled: true, desktopWriteProtection: true };
+function loadControlState() {
+  try {
+    const value = JSON.parse(fs.readFileSync(controlFile, 'utf8'));
+    return {
+      webWriteEnabled: value?.webWriteEnabled !== false,
+      desktopWriteProtection: value?.desktopWriteProtection !== false,
+    };
+  } catch {
+    return { ...DEFAULT_CONTROL_STATE };
+  }
+}
+let controlState = loadControlState();
+function controlSnapshot() {
+  return {
+    ...controlState,
+    effectiveWebWriteEnabled: controlState.webWriteEnabled && config.accessProfile !== 'read',
+    desktopWriteControlSupported: false,
+  };
+}
+function saveControlState(next) {
+  controlState = {
+    webWriteEnabled: next?.webWriteEnabled !== false,
+    desktopWriteProtection: next?.desktopWriteProtection !== false,
+  };
+  const temporary = `${controlFile}.tmp-${process.pid}`;
+  fs.writeFileSync(temporary, `${JSON.stringify(controlState)}\n`, { mode: 0o600 });
+  fs.renameSync(temporary, controlFile);
+  try { fs.chmodSync(controlFile, 0o600); } catch { /* best effort on non-POSIX filesystems */ }
+  return controlSnapshot();
+}
 
 if (config.requireAuth && !config.token) {
   console.error('CWEB_TOKEN is required when CWEB_REQUIRE_AUTH=1. Run scripts/install-linux.sh or set a strong token.');
@@ -137,6 +170,7 @@ function methodRisk(method) {
   const name = String(method || '');
   if (/\/(list|read|status|installed|detect|searchOccurrences)$/.test(name) || /^(model\/list|account\/read|config\/read|configRequirements\/read|server\/diagnostics)$/.test(name)) return 'read';
   if (/\/(delete|uninstall|revoke|terminate)$/.test(name) || /^command\/exec(?:\/|$)/.test(name) || /^config\/(value\/write|batchWrite)$/.test(name)) return 'danger';
+  if (/^(thread\/(name\/set|metadata\/update|goal\/(set|clear)))$/.test(name)) return 'write';
   if (/\/(create|update|write|install|import|move|start|resume|fork|interrupt|enable|disable|call|upload|login|logout|archive|unarchive)$/.test(name)) return 'write';
   return 'standard';
 }
@@ -149,6 +183,18 @@ function accessAllows(method) {
   return false;
 }
 
+function methodAllowed(method) {
+  return accessAllows(method) && (controlState.webWriteEnabled || methodRisk(method) === 'read');
+}
+
+function rejectWebWrite(res, method) {
+  return json(res, 403, {
+    error: 'WEB_WRITE_DISABLED',
+    message: '网页写入已关闭；当前页面保持官方历史只读。',
+    method,
+  });
+}
+
 function isActiveWriterRpcError(error) {
   const text = [
     error?.message,
@@ -157,7 +203,7 @@ function isActiveWriterRpcError(error) {
     error?.body?.rpc?.message,
     error?.body?.rpc?.data?.message,
   ].filter(Boolean).join(' ');
-  return /already has an active writer|active writer|currently being written/i.test(text);
+  return /already has an active writer|active writer|currently being written|another (?:official )?client|other official client|thread[^\n]{0,80}(?:being written|is active|has an active)/i.test(text);
 }
 
 function eventFrame(type, payload) {
@@ -292,7 +338,7 @@ function authenticated(req) { return !config.requireAuth || sessions.has(parseCo
 function requireAuth(req, res) { if (authenticated(req)) return true; json(res, 401, { error: 'AUTH_REQUIRED' }); return false; }
 function requireOrigin(req, res) { if (sameOrigin(req, config.publicOrigin)) return true; json(res, 403, { error: 'ORIGIN_REJECTED' }); return false; }
 function clientAddress(req) { return req.socket.remoteAddress || 'unknown'; }
-function methodSummary(item) { return { method: item.method, title: item.title, description: item.description, paramsRef: item.paramsRef, managed: item.method === 'initialize' || item.method === 'initialized', risk: methodRisk(item.method), allowed: accessAllows(item.method) }; }
+function methodSummary(item) { return { method: item.method, title: item.title, description: item.description, paramsRef: item.paramsRef, managed: item.method === 'initialize' || item.method === 'initialized', risk: methodRisk(item.method), allowed: methodAllowed(item.method) }; }
 
 function serveStatic(req, res, pathname) {
   const relative = pathname === '/' ? 'index.html' : pathname.slice(1);
@@ -340,6 +386,18 @@ async function api(req, res, url) {
     return json(res, 200, { ok: true }, { 'Set-Cookie': 'cweb_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' });
   }
 
+  if (pathname === '/api/control' && req.method === 'GET') return json(res, 200, { control: controlSnapshot() });
+  if (pathname === '/api/control' && req.method === 'POST') {
+    if (!requireOrigin(req, res)) return;
+    const body = await readJson(req, 64 * 1024);
+    const next = { ...controlState };
+    if (typeof body.webWriteEnabled === 'boolean') next.webWriteEnabled = body.webWriteEnabled;
+    if (typeof body.desktopWriteProtection === 'boolean') next.desktopWriteProtection = body.desktopWriteProtection;
+    const control = saveControlState(next);
+    pushEvent('controlChanged', { control });
+    return json(res, 200, { control });
+  }
+
   if (pathname === '/api/meta' && req.method === 'GET') {
     let initializeResult = codex.initializeResult;
     try { initializeResult = await codex.start(); } catch (error) { fatalCodexError = error.message; scheduleCodexRestart(); }
@@ -347,7 +405,7 @@ async function api(req, res, url) {
       app: 'codex-app-server-web', version: APP_VERSION, workspace: config.workspace,
       runtime: { bootId: runtimeBootId, startedAt: runtimeStartedAt },
       status: codex.isReady() && !fatalCodexError ? 'ready' : 'degraded', error: fatalCodexError,
-      schema: registry.summary(), initializeResult, access: { profile: config.accessProfile }, protocolSupport: protocolSupportSummary(),
+      schema: registry.summary(), initializeResult, access: { profile: config.accessProfile }, control: controlSnapshot(), protocolSupport: protocolSupportSummary(),
       capabilities: {
         experimentalApi: config.experimental,
         extensions: { 'openai/form': {}, ...(config.mcpAppsEnabled ? { [MCP_APPS_EXTENSION]: { mimeTypes: [MCP_APPS_MIME] } } : {}) },
@@ -364,6 +422,7 @@ async function api(req, res, url) {
         nativeItemTimeline: true, exactProtocolDispositionSeal: true, openaiFormNative: true,
         mcpAppsAdvertised: config.mcpAppsEnabled, mcpAppsDoubleIframeSandbox: true,
         dynamicToolsExperimentalOnly: true,
+        singleWriterReadBoundary: true, webWriteControl: true, desktopWriteControlSupported: false,
       },
     });
   }
@@ -392,14 +451,17 @@ async function api(req, res, url) {
     const descriptor = registry.getRequest(body.method);
     if (!descriptor) return json(res, 400, { error: 'METHOD_NOT_IN_OFFICIAL_SCHEMA', method: body.method });
     if (body.method === 'initialize') return json(res, 400, { error: 'INITIALIZE_IS_MANAGED_BY_GATEWAY' });
-    if (!accessAllows(body.method)) return json(res, 403, { error: 'METHOD_BLOCKED_BY_ACCESS_PROFILE', method: body.method, profile: config.accessProfile });
+    if (!methodAllowed(body.method)) {
+      if (!controlState.webWriteEnabled && methodRisk(body.method) !== 'read') return rejectWebWrite(res, body.method);
+      return json(res, 403, { error: 'METHOD_BLOCKED_BY_ACCESS_PROFILE', method: body.method, profile: config.accessProfile });
+    }
     let result;
     try { result = await codex.request(body.method, managedParams(body.method, body.params ?? {})); }
     catch (error) {
       // A thread owned by another official client is still perfectly readable.
-      // Treat resume as an explicit read-only conflict instead of leaking the
-      // upstream -32600 as a misleading HTTP 502 to the browser.
-      if (body.method === 'thread/resume' && isActiveWriterRpcError(error)) {
+      // Treat every active-writer collision as an explicit read-only conflict
+      // instead of leaking the upstream RPC error as a misleading HTTP 502.
+      if (isActiveWriterRpcError(error)) {
         return json(res, 409, {
           error: 'THREAD_READ_ONLY',
           message: '该会话正在其他官方客户端运行，网页将以只读方式加载；任务结束后即可继续发送。',
@@ -416,7 +478,10 @@ async function api(req, res, url) {
     const body = await readJson(req, config.bodyLimit);
     if (body.method === 'initialized') return json(res, 400, { error: 'INITIALIZED_IS_MANAGED_BY_GATEWAY' });
     if (!registry.getNotification(body.method)) return json(res, 400, { error: 'NOTIFICATION_NOT_IN_OFFICIAL_SCHEMA', method: body.method });
-    if (!accessAllows(body.method)) return json(res, 403, { error: 'METHOD_BLOCKED_BY_ACCESS_PROFILE', method: body.method, profile: config.accessProfile });
+    if (!methodAllowed(body.method)) {
+      if (!controlState.webWriteEnabled && methodRisk(body.method) !== 'read') return rejectWebWrite(res, body.method);
+      return json(res, 403, { error: 'METHOD_BLOCKED_BY_ACCESS_PROFILE', method: body.method, profile: config.accessProfile });
+    }
     await codex.notify(body.method, body.params ?? {});
     return json(res, 200, { ok: true });
   }
@@ -427,6 +492,7 @@ async function api(req, res, url) {
     if (!pending) return json(res, 404, { error: 'SERVER_REQUEST_NOT_PENDING' });
     if (!registry.getServerRequest(pending.method)) return json(res, 409, { error: 'SERVER_REQUEST_NOT_IN_OFFICIAL_SCHEMA' });
     if (MACHINE_ONLY_SERVER_REQUESTS.has(pending.method)) return json(res, 409, { error: 'PLATFORM_ONLY_SERVER_REQUEST', method: pending.method });
+    if (!controlState.webWriteEnabled) return rejectWebWrite(res, `respond:${pending.method}`);
     if (body.error) codex.respondError(body.id, body.error); else codex.respond(body.id, body.result ?? {});
     return json(res, 200, { ok: true });
   }
@@ -438,6 +504,7 @@ function errorStatus(error) {
   if (error.code === 'CODEX_RPC_TIMEOUT') return 504;
   if (['CODEX_APP_SERVER_EXITED', 'CODEX_CLIENT_BUSY', 'CODEX_WEBSOCKET_DISCONNECTED', 'WEBSOCKET_UNAVAILABLE'].includes(error.code)) return 503;
   if (error instanceof CodexRpcError) {
+    if (/no rollout found for thread id|thread not found|unknown thread/i.test(String(error.rpc?.message || error.message || ''))) return 404;
     if (error.rpc?.code === -32602) return 400;
     if (error.rpc?.code === -32001) return 503;
     return 502;
