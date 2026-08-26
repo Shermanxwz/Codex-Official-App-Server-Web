@@ -74,10 +74,13 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /new AbortController\(\)/);
   assert.match(app, /historyInsertPoint\(timeline,olderControl\)/);
   assert.match(app, /olderControl\.nextSibling/);
-  assert.doesNotMatch(app, /if\(!pager\|\|state\.fullHistoryMode\|\|!pager\.hasMore\)return/);
+  assert.match(app, /const QUICK_HISTORY_PAGE_SIZE=12/);
+  assert.match(app, /const FULL_HISTORY_PAGE_SIZE=12/);
+  assert.match(app, /if\(!state\.fullHistoryMode\|\|!pager\?\.hasMore\)return/);
   assert.match(app, /thread\/turns\/list/);
   assert.match(app, /itemsView:'full'/);
-  assert.match(app, /OFFICIAL_HISTORY_PAGE_SIZE/);
+  assert.match(app, /QUICK_HISTORY_PAGE_SIZE/);
+  assert.match(app, /FULL_HISTORY_PAGE_SIZE/);
   assert.match(app, /history-older-control/);
   assert.match(app, /fullHistoryMode/);
   assert.match(app, /turnDuration=turn=>/);
