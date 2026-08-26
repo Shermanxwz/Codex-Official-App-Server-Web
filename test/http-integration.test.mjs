@@ -35,6 +35,33 @@ if(args[0]==='app-server'){
 process.exit(2);
 `,{mode:0o755}); return file;
 }
+
+function fakeActiveWriterCodex(dir){
+  const file=path.join(dir,'codex');
+  fs.writeFileSync(file,`#!/usr/bin/env node
+const readline=require('node:readline');
+const args=process.argv.slice(2);
+if(args[0]==='--version'){console.log('codex-cli 9.9.9-active-writer-test');process.exit(0)}
+if(args[0]==='app-server'&&args[1]==='generate-json-schema'){
+ const out=args[args.indexOf('--out')+1];require('node:fs').mkdirSync(out,{recursive:true});
+ const variant=(method,ref)=>({title:method,properties:{id:{},method:{enum:[method]},params:{$ref:'#/definitions/'+ref}},required:['id','method','params']});
+ const req={definitions:{InitializeParams:{type:'object'},ThreadReadParams:{type:'object'},ThreadResumeParams:{type:'object'}},oneOf:[variant('initialize','InitializeParams'),variant('thread/read','ThreadReadParams'),variant('thread/resume','ThreadResumeParams')]};
+ const empty={definitions:{},oneOf:[]};
+ for(const [name,data] of [['ClientRequest.json',req],['ClientNotification.json',empty],['ServerRequest.json',empty],['ServerNotification.json',empty]])require('node:fs').writeFileSync(require('node:path').join(out,name),JSON.stringify(data));process.exit(0);
+}
+if(args[0]==='app-server'&&args[1]==='generate-ts'){
+ const out=args[args.indexOf('--out')+1];require('node:fs').mkdirSync(out,{recursive:true});
+ require('node:fs').writeFileSync(require('node:path').join(out,'ClientRequest.ts'),'export type ClientRequest={"method":"initialize"}|{"method":"thread/read"}|{"method":"thread/resume"};');
+ for(const name of ['ClientNotification.ts','ServerRequest.ts','ServerNotification.ts'])require('node:fs').writeFileSync(require('node:path').join(out,name),'export type Empty=never;');
+ process.exit(0);
+}
+if(args[0]==='app-server'){
+ const rl=readline.createInterface({input:process.stdin});
+ rl.on('line',line=>{const m=JSON.parse(line);if(m.method==='initialize')return console.log(JSON.stringify({id:m.id,result:{codexHome:'/fake',platformFamily:'unix',platformOs:'linux'}}));if(m.method==='initialized')return;if(m.method==='thread/read')return console.log(JSON.stringify({id:m.id,result:{thread:{id:'thread-1',turns:[]}}}));if(m.method==='thread/resume')return console.log(JSON.stringify({id:m.id,error:{code:-32600,message:'thread thread-1 already has an active writer'}}));if(m.id!==undefined)console.log(JSON.stringify({id:m.id,result:{}}));});return;
+}
+process.exit(2);
+`,{mode:0o755}); return file;
+}
 async function waitReady(url, child){for(let i=0;i<80;i++){if(child.exitCode!==null)throw new Error(`server exited ${child.exitCode}`);try{const r=await fetch(`${url}/readyz`);if(r.status===200)return;}catch{}await new Promise(r=>setTimeout(r,50));}throw new Error('server/app-server did not become ready');}
 
 test('full HTTP gateway admits only methods exported by official schema', async(t)=>{
@@ -63,4 +90,16 @@ test('full HTTP gateway admits only methods exported by official schema', async(
   });
   await events.body?.cancel();
   assert.equal(exited.code,0,logs);
+});
+
+test('active-writer resume is a read-only conflict, never an HTTP 502', async(t)=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cweb-active-writer-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const codex=fakeActiveWriterCodex(dir); const port=await getFreePort(); const url=`http://127.0.0.1:${port}`; const token='active-writer-test-token'; let logs='';
+  const child=spawn(process.execPath,['src/server.mjs'],{cwd:root,env:{...process.env,CWEB_CODEX_BIN:codex,CWEB_STATE_DIR:path.join(dir,'state'),CWEB_WORKSPACE:dir,CWEB_HOST:'127.0.0.1',CWEB_PORT:String(port),CWEB_REQUIRE_AUTH:'1',CWEB_TOKEN:token,CWEB_MCP_APPS:'0'},stdio:['ignore','pipe','pipe']});
+  child.stdout.on('data',x=>logs+=x); child.stderr.on('data',x=>logs+=x); t.after(()=>{if(child.exitCode===null)child.kill('SIGTERM')});
+  await waitReady(url,child); const origin=url; const login=await fetch(`${url}/api/login`,{method:'POST',headers:{'content-type':'application/json',origin},body:JSON.stringify({token})}); assert.equal(login.status,200,logs); const cookie=login.headers.get('set-cookie').split(';',1)[0];
+  const resume=await fetch(`${url}/api/rpc`,{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'thread/resume',params:{threadId:'thread-1'}})});
+  assert.equal(resume.status,409,logs); const conflict=await resume.json(); assert.equal(conflict.error,'THREAD_READ_ONLY'); assert.match(conflict.message,/只读/);
+  const read=await fetch(`${url}/api/rpc`,{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'thread/read',params:{threadId:'thread-1',includeTurns:false}})});
+  assert.equal(read.status,200,logs); assert.equal((await read.json()).result.thread.id,'thread-1');
 });

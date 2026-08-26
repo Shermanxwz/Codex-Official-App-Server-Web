@@ -149,6 +149,17 @@ function accessAllows(method) {
   return false;
 }
 
+function isActiveWriterRpcError(error) {
+  const text = [
+    error?.message,
+    error?.rpc?.message,
+    error?.body?.message,
+    error?.body?.rpc?.message,
+    error?.body?.rpc?.data?.message,
+  ].filter(Boolean).join(' ');
+  return /already has an active writer|active writer|currently being written/i.test(text);
+}
+
 function eventFrame(type, payload) {
   const event = { type, payload, at: Date.now(), sequence: ++eventSequence };
   const text = JSON.stringify(event);
@@ -384,7 +395,20 @@ async function api(req, res, url) {
     if (!accessAllows(body.method)) return json(res, 403, { error: 'METHOD_BLOCKED_BY_ACCESS_PROFILE', method: body.method, profile: config.accessProfile });
     let result;
     try { result = await codex.request(body.method, managedParams(body.method, body.params ?? {})); }
-    catch (error) { error.requestMethod = body.method; throw error; }
+    catch (error) {
+      // A thread owned by another official client is still perfectly readable.
+      // Treat resume as an explicit read-only conflict instead of leaking the
+      // upstream -32600 as a misleading HTTP 502 to the browser.
+      if (body.method === 'thread/resume' && isActiveWriterRpcError(error)) {
+        return json(res, 409, {
+          error: 'THREAD_READ_ONLY',
+          message: '该会话正在其他官方客户端运行，网页将以只读方式加载；任务结束后即可继续发送。',
+          threadId: String(body.params?.threadId || ''),
+        });
+      }
+      error.requestMethod = body.method;
+      throw error;
+    }
     return json(res, 200, { result });
   }
   if (pathname === '/api/notify' && req.method === 'POST') {
