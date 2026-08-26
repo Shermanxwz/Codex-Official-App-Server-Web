@@ -2,6 +2,11 @@
 Description=Codex App Server Web
 After=network-online.target
 Wants=network-online.target
+# When installed by scripts/install-linux.sh, the gateway connects to the
+# independently supervised official WebSocket App Server. Keeping this edge
+# optional also preserves the portable stdio mode for manual deployments.
+After=codex-official-app-server.service
+Wants=codex-official-app-server.service
 StartLimitIntervalSec=60
 StartLimitBurst=5
 
@@ -10,6 +15,7 @@ Type=simple
 WorkingDirectory=__PROJECT_ROOT__
 ExecStart="__NODE_BIN__" "__PROJECT_ROOT__/src/server.mjs"
 Environment=NODE_ENV=production
+Environment=PATH=__NODE_BIN_DIR__:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 EnvironmentFile=__ENV_FILE__
 # Proxy variables, when present in the private EnvironmentFile, are forwarded
 # to the official Codex child by the gateway's sanitized environment policy.

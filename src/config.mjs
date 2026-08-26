@@ -36,18 +36,27 @@ export const config = Object.freeze({
   host: process.env.CWEB_HOST || '127.0.0.1',
   port: integer('CWEB_PORT', 4173, 1, 65535),
   codexBin: process.env.CWEB_CODEX_BIN || 'codex',
+  // Keep stdio as the library/portable default. The Linux installer opts into
+  // a separately supervised official WebSocket App Server so a Web gateway
+  // restart does not own or terminate an in-flight official Turn.
+  codexTransport: choice('CWEB_CODEX_TRANSPORT', 'stdio', ['stdio', 'websocket']),
+  codexServerUrl: process.env.CWEB_CODEX_SERVER_URL || 'ws://127.0.0.1:43999',
   workspace: path.resolve(process.env.CWEB_WORKSPACE || process.cwd()),
   stateDir: path.resolve(process.env.CWEB_STATE_DIR || path.join(stateHome, 'codex-app-server-web')),
   configDir: path.resolve(process.env.CWEB_CONFIG_DIR || path.join(configHome, 'codex-app-server-web')),
   requireAuth: bool('CWEB_REQUIRE_AUTH', true),
-  experimental: bool('CWEB_EXPERIMENTAL', false),
+  // Official thread/turns/list pagination is currently exported by the
+  // pinned Codex baseline through the experimental handshake. Keep it on by
+  // default so the normal Web view does not fall back to a monolithic read;
+  // schema negotiation still fails closed if an upstream removes it.
+  experimental: bool('CWEB_EXPERIMENTAL', true),
   publicOrigin: process.env.CWEB_PUBLIC_ORIGIN || '',
   token: process.env.CWEB_TOKEN || '',
   accessProfile: choice('CWEB_ACCESS_PROFILE', 'full', ['read', 'coding', 'admin', 'full']),
-  // The aggregate diff is available through fileChange items and is not a
-  // human-facing conversation event. Suppress it at the official handshake;
+  // Aggregate diffs and moderation bookkeeping are official transport events,
+  // not human-facing conversation content. Suppress them at the handshake;
   // the browser still keeps a defensive presentation-layer filter.
-  notificationOptOut: [...new Set(['turn/diff/updated', ...list('CWEB_NOTIFICATION_OPT_OUT')])],
+  notificationOptOut: [...new Set(['turn/diff/updated', 'turn/moderationMetadata', ...list('CWEB_NOTIFICATION_OPT_OUT')])],
   mcpAppsEnabled: bool('CWEB_MCP_APPS', true),
   mcpAppPermissions: allowedList('CWEB_MCP_APP_PERMISSIONS', ['camera', 'microphone', 'geolocation', 'clipboardWrite']),
   dynamicToolsFile: process.env.CWEB_DYNAMIC_TOOLS_FILE ? path.resolve(process.env.CWEB_DYNAMIC_TOOLS_FILE) : '',

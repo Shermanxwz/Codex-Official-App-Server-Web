@@ -5,7 +5,8 @@
 - auth is on by default;
 - unauthenticated non-loopback bind is refused;
 - state-changing API requests require same-origin validation;
-- official App Server runs as one owned stdio child with `CWEB_*` stripped;
+- the Linux archive deployment runs the official App Server as a separate supervised WebSocket service; the Web gateway may also use the portable owned stdio child mode;
+- the official service binds only to loopback, and receives no Web session token or other `CWEB_*` setting;
 - RPCs, server requests, stdin, JSONL lines, HTTP bodies, SSE clients/events, sessions and rate-limit keys are bounded;
 - crashes clear stale ServerRequests and restart with bounded exponential delay;
 - shutdown terminates only owned children.

@@ -12,7 +12,7 @@ function fakeCodex(){
   fs.writeFileSync(file,`#!/usr/bin/env node
 const fs=require('node:fs'),readline=require('node:readline');
 const rl=readline.createInterface({input:process.stdin});
-rl.on('line',line=>{const m=JSON.parse(line); if(m.method==='initialize'){console.log(JSON.stringify({id:m.id,result:{codexHome:'/fake',platformFamily:'unix',platformOs:'linux',clientCapabilities:m.params.capabilities}}));return;} if(m.method==='initialized')return; if(m.method==='thread/list'){console.log(JSON.stringify({id:m.id,result:{data:[{id:'t1',preview:'hello'}]}}));return;} if(m.method==='test/requestServer'){console.log(JSON.stringify({id:m.id,result:{ok:true}})); console.log(JSON.stringify({id:99,method:'item/commandExecution/requestApproval',params:{threadId:'t1'}})); return;} if(m.method==='test/manyServerRequests'){console.log(JSON.stringify({id:m.id,result:{ok:true}})); for(let i=0;i<3;i++) console.log(JSON.stringify({id:200+i,method:'item/commandExecution/requestApproval',params:{n:i}})); return;} if(m.method==='test/crash'){process.exit(42)} if(m.method==='test/closeStdin'){process.stdin.destroy();try{fs.closeSync(0)}catch{}setTimeout(()=>{},1000);return;} if(m.method==='test/hang')return; if(m.id!==undefined) console.log(JSON.stringify({id:m.id,result:{echo:m.params}}));});
+rl.on('line',line=>{const m=JSON.parse(line); if(m.method==='initialize'){console.log(JSON.stringify({id:m.id,result:{codexHome:'/fake',platformFamily:'unix',platformOs:'linux',clientCapabilities:m.params.capabilities}}));return;} if(m.method==='initialized')return; if(m.method==='thread/list'){console.log(JSON.stringify({id:m.id,result:{data:[{id:'t1',preview:'hello'}]}}));return;} if(m.method==='test/requestServer'){console.log(JSON.stringify({id:m.id,result:{ok:true}})); console.log(JSON.stringify({id:99,method:'item/commandExecution/requestApproval',params:{threadId:'t1'}})); return;} if(m.method==='test/manyServerRequests'){console.log(JSON.stringify({id:m.id,result:{ok:true}})); for(let i=0;i<3;i++) console.log(JSON.stringify({id:200+i,method:'item/commandExecution/requestApproval',params:{n:i}})); return;} if(m.method==='test/oversize'){process.stdout.write('x'.repeat(1000)+'\\n');return;} if(m.method==='test/crash'){process.exit(42)} if(m.method==='test/closeStdin'){process.stdin.destroy();try{fs.closeSync(0)}catch{}setTimeout(()=>{},1000);return;} if(m.method==='test/hang')return; if(m.id!==undefined) console.log(JSON.stringify({id:m.id,result:{echo:m.params}}));});
 `,{mode:0o755});
   return {dir,file};
 }
@@ -96,4 +96,15 @@ test('pending server-initiated request memory is bounded', async(t)=>{
   await protocolError;
   await new Promise(resolve=>setTimeout(resolve,20));
   assert.equal(client.pendingServerRequests().length,1);
+});
+
+test('oversized official JSONL is contained and emits one protocol error', async(t)=>{
+  const fake=fakeCodex(); t.after(()=>fs.rmSync(fake.dir,{recursive:true,force:true}));
+  const client=new CodexAppServer({codexBin:fake.file,cwd:fake.dir,timeoutMs:2000,maxLineBytes:256}); t.after(()=>client.close());
+  await client.start();
+  const protocolError=once(client,'protocolError'),crash=once(client,'crash');
+  await assert.rejects(client.request('test/oversize',{}),error=>error.code==='CODEX_APP_SERVER_EXITED');
+  const [protocol]=await protocolError; const [crashError]=await crash;
+  assert.equal(protocol.code,'CODEX_PROTOCOL_LINE_TOO_LARGE');
+  assert.match(crashError.message,/exited/);
 });

@@ -22,6 +22,8 @@ test('readJson enforces request limit', async()=>{
 test('auth primitives fail closed',()=>{
   assert.equal(safeEqualText('same','same'),true); assert.equal(safeEqualText('same','diff'),false);
   const sessions=new SessionStore(10); const token=sessions.create(); assert.equal(sessions.has(token),true); sessions.delete(token); assert.equal(sessions.has(token),false);
+  const signedA=new SessionStore(60_000,3,'private-test-secret'),signedToken=signedA.create(),signedB=new SessionStore(60_000,3,'private-test-secret');
+  assert.equal(signedB.has(signedToken),true); assert.equal(new SessionStore(60_000,3,'other-secret').has(signedToken),false); signedA.delete(signedToken); assert.equal(signedA.has(signedToken),false);
   const rate=new SlidingRateLimit(2,1000); assert.equal(rate.allow('x'),true); assert.equal(rate.allow('x'),true); assert.equal(rate.allow('x'),false);
 });
 

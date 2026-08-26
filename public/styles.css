@@ -301,3 +301,74 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
 .history-loading{display:flex;align-items:center;justify-content:center;min-height:180px;color:var(--muted);font-size:12px}
 .history-loading::before{content:'';width:13px;height:13px;margin-right:8px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:history-loading-spin .8s linear infinite}
 @keyframes history-loading-spin{to{transform:rotate(360deg)}}
+
+/* Official paginated history: recent turns stay light, older turns are an
+   explicit user action, and the full-history mode is visible in the sidebar. */
+.history-mode-button{color:var(--muted)}
+.history-mode-button.active{background:var(--panel);color:var(--text);border:1px solid var(--line)}
+.history-older-control{display:flex;align-items:center;justify-content:center;width:min(100%,420px);min-height:32px;margin:0 auto 16px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:var(--soft);color:var(--muted);font-size:10px}
+.history-older-control:hover:not(:disabled){border-color:var(--strong);color:var(--text)}
+.history-older-control:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.history-older-control.loading{cursor:wait}
+.history-older-control.loading::before{content:'';width:11px;height:11px;margin-right:7px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:history-loading-spin .8s linear infinite}
+@media(max-width:760px){
+  .turn-header-detail{display:inline;font-size:9px}
+  .history-mode-button{min-height:38px}
+  .history-older-control{width:calc(100% - 8px);margin-bottom:12px;font-size:11px}
+}
+
+/* Full-history search is backed by the official occurrence index (with a
+   local pass over rendered work-process text); keep its controls pinned to
+   the timeline's top edge while the user scrolls. */
+.history-search{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:8px;padding:0 0 10px;background:linear-gradient(var(--bg) 72%,transparent);}
+.history-search .search-box{min-width:0;flex:1;background:color-mix(in srgb,var(--panel) 92%,transparent);border-color:var(--line)}
+.history-search .search-box input{font-size:11px}
+.history-search-meta{flex:0 0 auto;color:var(--muted);font-size:9px;white-space:nowrap}
+.history-search-hidden{display:none!important}
+
+/* The current official plan is a compact, always-visible bottom affordance.
+   Desktop users preview its steps on hover/focus; touch users open it by tap. */
+.composer-wrap{position:relative}
+.official-plan-dock{position:relative;z-index:13;width:min(100%,var(--content));margin:0 auto 8px}
+.official-plan-dock>.official-plan{margin:0;padding:8px 10px;background:color-mix(in srgb,var(--panel) 94%,var(--soft));box-shadow:0 5px 20px rgba(0,0,0,.09)}
+.official-plan-dock .official-plan-details{position:absolute;right:0;bottom:calc(100% + 8px);width:min(560px,calc(100vw - 36px));max-height:min(64vh,620px);overflow:auto;padding:10px 11px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:var(--shadow)}
+.official-plan-dock .official-plan-details .official-plan-steps{margin-bottom:0}
+.official-plan-completed{display:block;margin-top:7px;color:var(--muted);font-size:9px}
+.timeline .official-plan{display:none}
+.composer-toggle{display:inline-flex;align-items:center;gap:4px;min-width:0;min-height:28px;padding:0 7px;border:1px solid transparent;border-radius:999px;background:var(--soft);color:var(--muted);font-size:9px;white-space:nowrap}
+.composer-toggle:hover{border-color:var(--line);color:var(--text)}
+.composer-toggle.active{border-color:color-mix(in srgb,var(--ok) 28%,var(--line));color:var(--ok)}
+.composer-toggle.inactive{color:var(--faint)}
+.auto-scroll-icon{font-size:12px;line-height:1}
+.auto-scroll-state{font-weight:700}
+@media(max-width:760px){
+  .history-search{align-items:stretch;flex-direction:column;gap:3px;padding-bottom:8px}
+  .history-search-meta{padding-left:8px;font-size:10px}
+  .official-plan-dock{width:100%;margin-bottom:6px}
+  .official-plan-dock .official-plan-details{position:static;width:auto;max-height:42vh;margin-top:7px;padding:8px;border-radius:9px;overflow:auto}
+  .official-plan-dock>.official-plan{padding:8px}
+  .official-plan-dock .official-plan-step{font-size:11px}
+  .composer-toggle{padding-inline:6px;font-size:9px}
+}
+@media(max-width:480px){
+  .composer-toggle{max-width:78px;overflow:hidden;text-overflow:ellipsis}
+  .auto-scroll-label{overflow:hidden;text-overflow:ellipsis}
+}
+
+/* Mobile context details belong to the viewport, not the narrow right-hand
+   toolbar column. This prevents the usage card from being clipped or pushed
+   off the left edge when the composer wraps after a send. */
+@media(max-width:760px){
+  .context-usage-panel{
+    position:fixed!important;
+    left:max(8px,env(safe-area-inset-left))!important;
+    right:max(8px,env(safe-area-inset-right))!important;
+    top:auto!important;
+    bottom:calc(env(safe-area-inset-bottom) + 84px)!important;
+    width:auto!important;
+    max-width:none!important;
+    max-height:min(44vh,320px);
+    overflow:auto;
+    z-index:60;
+  }
+}

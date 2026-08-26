@@ -18,9 +18,11 @@ test('implementation contains no direct Codex credential/config ownership',()=>{
   }
 });
 
-test('gateway spawns only its own app-server child with official stdio transport',()=>{
+test('gateway uses only an official transport and never kills unrelated Codex processes',()=>{
   const text=fs.readFileSync(path.join(root,'src/codex-client.mjs'),'utf8');
   assert.match(text,/spawn\(this\.codexBin, \['app-server', '--listen', 'stdio:\/\/'\]/);
+  assert.match(text,/new WebSocketImpl\(this\.serverUrl\)/);
+  assert.match(text,/transport === 'websocket'/);
   assert.match(text,/child\.kill\('SIGTERM'\)/);
   assert.doesNotMatch(text,/(pkill|killall)/);
 });

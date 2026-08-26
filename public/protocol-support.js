@@ -34,6 +34,7 @@ export const TIMELINE_DELTA_NOTIFICATIONS = Object.freeze({
   'item/reasoning/textDelta': 'reasoning',
   'item/mcpToolCall/progress': 'tool-progress',
   'turn/diff/updated': 'ignore',
+  'turn/moderationMetadata': 'ignore',
   'turn/plan/updated': 'ignore',
 });
 

@@ -34,7 +34,7 @@ Stable MCP Apps hosting is real, not a capability stub. The client declares `io.
 
 ## Experimental surface
 
-`CWEB_EXPERIMENTAL=1` asks Codex to export/accept experimental protocol. The experimental seal separately regenerates the protocol and requires `currentTime/read` plus `thread/start.dynamicTools` on the pinned archive baseline. Dynamic Tool auto-host configuration is refused in stable mode.
+`CWEB_EXPERIMENTAL=1` asks Codex to export/accept experimental protocol. The experimental seal separately regenerates the protocol and requires `currentTime/read` plus `thread/start.dynamicTools` on the pinned archive baseline. The pinned baseline also exposes the official `thread/turns/list`, `thread/items/list`, and `thread/searchOccurrences` history surfaces there; the Web client uses `thread/turns/list` for a small recent page by default, fetches older pages only on explicit request, and follows the cursor to exhaustion only in the sidebar full-history mode. Full-history keyword search uses the official occurrence index and supplements it with a local pass over already-rendered work-process text. Dynamic Tool auto-host configuration is refused in stable mode.
 
 ## Drift behavior
 

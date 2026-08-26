@@ -7,7 +7,7 @@ This document defines what “final archive” means for this repository.
 - application version: `0.4.0`
 - Node.js: `>=22.12.0`
 - validated official Codex: `@openai/codex 0.149.1`
-- product transport: `codex app-server --listen stdio://`
+- product transport: official `codex app-server --listen ws://127.0.0.1:43999` under the Linux installer’s separate systemd user service; portable stdio remains supported for manual startup
 - runtime npm dependencies: zero
 - MCP Apps protocol: stable `2026-01-26`
 
@@ -46,3 +46,7 @@ The repository does not directly own Codex credentials/config/session files, ins
 ## Verification limitation
 
 Repository CI can verify official schema generation, process protocol, sandbox/host logic and fake-App-Server end-to-end behavior without user secrets. A real authenticated model turn necessarily depends on credentials on the deployment machine and is not claimed unless actually executed there.
+
+## Runtime recovery boundary
+
+The Web gateway exposes a per-boot runtime identity in `/api/meta` and the SSE `connected` event. The browser uses that identity, EventSource reconnect, official `thread/resume`, and official paged history to restore the selected Web session without a new user message. The Linux archive deployment keeps the official App Server in a separate `codex-official-app-server.service`, so stopping/restarting only the Web gateway leaves an in-flight official Turn owned by the official service and lets the new gateway reconnect and reconcile it. Notifications missed during a disconnected Web gateway are not invented or replayed; authoritative official thread state is re-read. Stopping the official App Server itself, or losing the machine, terminates the Turn, and no official method resurrects that dead generation. The UI clears stale live state and restores a resumable thread rather than claiming process resurrection.

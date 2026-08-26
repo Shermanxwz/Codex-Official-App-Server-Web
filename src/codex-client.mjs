@@ -24,13 +24,16 @@ export function sanitizedCodexEnv(source = process.env) {
 
 export class CodexAppServer extends EventEmitter {
   constructor({
-    codexBin = 'codex', cwd, experimental = false, capabilities = {}, timeoutMs = 600_000,
+    codexBin = 'codex', cwd, transport = 'stdio', serverUrl = 'ws://127.0.0.1:43999',
+    experimental = false, capabilities = {}, timeoutMs = 600_000,
     maxPending = 64, maxServerRequests = maxPending, maxStdinBufferBytes = 4 * 1024 * 1024,
     maxLineBytes = 32 * 1024 * 1024,
   }) {
     super();
     this.codexBin = codexBin;
     this.cwd = cwd;
+    this.transport = transport === 'websocket' ? 'websocket' : 'stdio';
+    this.serverUrl = serverUrl;
     this.experimental = experimental;
     this.capabilities = capabilities && typeof capabilities === 'object' ? capabilities : {};
     this.timeoutMs = timeoutMs;
@@ -42,6 +45,7 @@ export class CodexAppServer extends EventEmitter {
     this.pending = new Map();
     this.serverRequests = new Map();
     this.child = null;
+    this.socket = null;
     this.ready = null;
     this.closed = false;
     this.initializeResult = null;
@@ -53,10 +57,14 @@ export class CodexAppServer extends EventEmitter {
   start() {
     if (this.closed) return Promise.reject(new Error('Codex App Server client is closed'));
     if (this.ready) return this.ready;
-    const promise = this.#startProcess();
+    const promise = this.#startTransport();
     this.ready = promise;
     promise.catch(() => { if (this.ready === promise) this.ready = null; });
     return promise;
+  }
+
+  #startTransport() {
+    return this.transport === 'websocket' ? this.#startWebSocket() : this.#startProcess();
   }
 
   #initializeCapabilities() {
@@ -93,12 +101,6 @@ export class CodexAppServer extends EventEmitter {
       this.#failAll(error);
       this.emit('transportError', { error, generation });
     };
-    const terminateForProtocolError = (error) => {
-      if (this.child !== child || generation !== this.generation || this.protocolTerminationGeneration === generation) return;
-      this.protocolTerminationGeneration = generation;
-      this.emit('protocolError', { message: error.message });
-      child.kill('SIGTERM');
-    };
     child.stdout.on('data', (chunk) => this.#onStdoutChunk(child, generation, chunk));
     child.stderr.on('data', (chunk) => { if (this.child === child) this.emit('stderr', chunk.toString()); });
     child.stdin.on('error', failTransport);
@@ -127,13 +129,119 @@ export class CodexAppServer extends EventEmitter {
     }
   }
 
+  async #startWebSocket() {
+    const WebSocketImpl = globalThis.WebSocket;
+    if (typeof WebSocketImpl !== 'function') {
+      const error = new Error('This Node.js runtime does not provide the WebSocket client required by CWEB_CODEX_TRANSPORT=websocket');
+      error.code = 'WEBSOCKET_UNAVAILABLE';
+      throw error;
+    }
+    const generation = ++this.generation;
+    let socket;
+    try { socket = new WebSocketImpl(this.serverUrl); }
+    catch (error) {
+      error.code ||= 'CODEX_WEBSOCKET_CONNECT_FAILED';
+      throw error;
+    }
+    this.socket = socket;
+    let opened = false;
+    let ended = false;
+    let resolveOpen;
+    let rejectOpen;
+    const opening = new Promise((resolve, reject) => { resolveOpen = resolve; rejectOpen = reject; });
+    const transportError = (message, cause = null) => {
+      if (this.socket !== socket || generation !== this.generation || ended) return;
+      const error = new Error(message);
+      error.code = 'CODEX_WEBSOCKET_DISCONNECTED';
+      if (cause) error.cause = cause;
+      if (!opened) rejectOpen(error);
+      this.#onSocketExit(socket, generation, null, '', error);
+      ended = true;
+    };
+    socket.addEventListener('open', () => {
+      if (this.socket !== socket || generation !== this.generation || ended) return;
+      opened = true;
+      resolveOpen();
+    });
+    socket.addEventListener('error', (event) => {
+      const detail = event?.message ? `: ${event.message}` : '';
+      transportError(`Codex App Server WebSocket error${detail}`, event);
+    });
+    socket.addEventListener('close', (event) => {
+      if (this.socket !== socket || generation !== this.generation || ended) return;
+      const detail = event?.reason ? `: ${event.reason}` : '';
+      const error = new Error(`Codex App Server WebSocket closed (${event?.code ?? 'unknown'})${detail}`);
+      error.code = 'CODEX_WEBSOCKET_DISCONNECTED';
+      if (!opened) rejectOpen(error);
+      this.#onSocketExit(socket, generation, event?.code ?? null, event?.reason || '', error);
+      ended = true;
+    });
+    socket.addEventListener('message', (event) => {
+      void this.#onWebSocketMessage(socket, generation, event?.data).catch((error) => {
+        transportError(`Codex App Server WebSocket message could not be read: ${error.message}`, error);
+      });
+    });
+
+    try {
+      await opening;
+      const result = await this.#requestRaw('initialize', {
+        clientInfo: { name: 'codex_app_server_web', title: 'Codex App Server Web', version: '0.4.0' },
+        capabilities: this.#initializeCapabilities(),
+      }, 30_000);
+      if (this.socket !== socket || generation !== this.generation || ended) throw new Error('Codex App Server WebSocket changed during initialization');
+      this.#send({ method: 'initialized', params: {} });
+      this.initializeResult = result;
+      this.emit('ready', result);
+      return result;
+    } catch (error) {
+      this.emit('startError', {
+        error,
+        generation,
+        url: this.serverUrl,
+        pendingMethods: [...this.pending.values()].map((pending) => pending.method),
+      });
+      if (this.socket === socket && !ended) {
+        ended = true;
+        try { socket.close(); } catch { /* ignore */ }
+        this.#onSocketExit(socket, generation, null, '', error);
+      }
+      throw error;
+    }
+  }
+
+  async #onWebSocketMessage(socket, generation, data) {
+    if (this.socket !== socket || generation !== this.generation) return;
+    let text;
+    if (typeof data === 'string') text = data;
+    else if (data instanceof ArrayBuffer) text = new TextDecoder().decode(data);
+    else if (ArrayBuffer.isView(data)) text = new TextDecoder().decode(data);
+    else if (data && typeof data.text === 'function') text = await data.text();
+    else text = String(data ?? '');
+    if (!text) return;
+    if (Buffer.byteLength(text) > this.maxLineBytes) {
+      if (this.protocolTerminationGeneration === generation) return;
+      this.protocolTerminationGeneration = generation;
+      const error = new Error(`Codex App Server emitted a WebSocket message larger than ${this.maxLineBytes} bytes`);
+      error.code = 'CODEX_PROTOCOL_LINE_TOO_LARGE';
+      this.emit('protocolError', { message: error.message, code: error.code });
+      try { socket.close(1009, 'message too large'); } catch { /* handled by close/error */ }
+      return;
+    }
+    // The official WebSocket transport sends one JSON object per message. The
+    // split also accepts JSONL from compatible proxies without weakening the
+    // same per-message protocol parser and limits.
+    for (const line of text.split(/\r?\n/)) {
+      if (line.trim()) this.#onLine(line.trim());
+    }
+  }
+
   #onStdoutChunk(child, generation, chunk) {
     if (this.child !== child || generation !== this.generation) return;
     this.stdoutBuffer = Buffer.concat([this.stdoutBuffer, Buffer.from(chunk)]);
     if (this.stdoutBuffer.length > this.maxLineBytes && this.stdoutBuffer.indexOf(0x0a) === -1) {
       const error = new Error(`Codex App Server emitted a JSONL line larger than ${this.maxLineBytes} bytes`);
       error.code = 'CODEX_PROTOCOL_LINE_TOO_LARGE';
-      terminateForProtocolError(error);
+      this.#terminateForProtocolError(child, generation, error);
       return;
     }
     for (;;) {
@@ -145,14 +253,36 @@ export class CodexAppServer extends EventEmitter {
       if (line.length > this.maxLineBytes) {
         const error = new Error(`Codex App Server emitted a JSONL line larger than ${this.maxLineBytes} bytes`);
         error.code = 'CODEX_PROTOCOL_LINE_TOO_LARGE';
-        terminateForProtocolError(error);
+        this.#terminateForProtocolError(child, generation, error);
         return;
       }
       this.#onLine(line.toString('utf8'));
     }
   }
 
+  #terminateForProtocolError(child, generation, error) {
+    if (this.child !== child || generation !== this.generation || this.protocolTerminationGeneration === generation) return;
+    this.protocolTerminationGeneration = generation;
+    this.emit('protocolError', { message: error.message, code: error.code });
+    child.kill('SIGTERM');
+  }
+
   #send(message) {
+    if (this.transport === 'websocket') {
+      const socket = this.socket;
+      if (!socket || socket.readyState !== 1) throw new Error('Codex App Server WebSocket is unavailable');
+      const data = JSON.stringify(message);
+      const bytes = Buffer.byteLength(data);
+      if ((socket.bufferedAmount || 0) + bytes > this.maxStdinBufferBytes) {
+        throw new CodexClientBusyError('Codex App Server WebSocket backpressure limit reached');
+      }
+      try { socket.send(data); }
+      catch (error) {
+        if (this.socket === socket) this.#failAll(error);
+        throw error;
+      }
+      return;
+    }
     const child = this.child;
     if (!child?.stdin?.writable) throw new Error('Codex App Server stdin is unavailable');
     const data = `${JSON.stringify(message)}\n`;
@@ -247,7 +377,12 @@ export class CodexAppServer extends EventEmitter {
   }
 
   pendingServerRequests() { return [...this.serverRequests.values()]; }
-  isReady() { return Boolean(this.child?.stdin?.writable && this.initializeResult && this.ready); }
+  isReady() {
+    const transportReady = this.transport === 'websocket'
+      ? this.socket?.readyState === 1
+      : this.child?.stdin?.writable;
+    return Boolean(transportReady && this.initializeResult && this.ready);
+  }
 
   #clearServerRequests(reason) {
     if (!this.serverRequests.size) return;
@@ -289,6 +424,32 @@ export class CodexAppServer extends EventEmitter {
     if (!this.closed) this.emit('crash', error);
   }
 
+  #onSocketExit(socket, generation, closeCode, closeReason, suppliedError = null) {
+    if (this.socket !== socket || generation !== this.generation) return;
+    const error = suppliedError || new Error(`Codex App Server WebSocket closed (${closeCode ?? 'unknown'})`);
+    error.code ||= 'CODEX_WEBSOCKET_DISCONNECTED';
+    this.socket = null;
+    this.ready = null;
+    this.initializeResult = null;
+    const pendingMethods = [...this.pending.values()].map((pending) => pending.method);
+    this.#failAll(error);
+    this.#clearServerRequests(error);
+    this.emit('exit', {
+      code: null,
+      signal: null,
+      generation,
+      pid: null,
+      killed: false,
+      exitCode: null,
+      signalCode: null,
+      closeCode,
+      closeReason,
+      transport: 'websocket',
+      pendingMethods,
+    });
+    if (!this.closed) this.emit('crash', error);
+  }
+
   close() {
     if (this.closed) return;
     this.closed = true;
@@ -296,6 +457,11 @@ export class CodexAppServer extends EventEmitter {
     this.initializeResult = null;
     this.#failAll(new Error('Codex App Server client closed'));
     this.#clearServerRequests(new Error('Codex App Server client closed'));
+    const socket = this.socket;
+    this.socket = null;
+    if (socket && (socket.readyState === 0 || socket.readyState === 1)) {
+      try { socket.close(1000, 'gateway shutdown'); } catch { /* ignore */ }
+    }
     const child = this.child;
     this.child = null;
     if (child && child.exitCode === null && !child.killed) {

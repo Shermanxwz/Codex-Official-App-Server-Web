@@ -85,16 +85,37 @@ export function isLoopbackHost(host) {
 }
 
 export class SessionStore {
-  constructor(ttlMs = 12 * 60 * 60 * 1000, maxSessions = 256) {
+  constructor(ttlMs = 12 * 60 * 60 * 1000, maxSessions = 256, signingSecret = '') {
     this.ttlMs = ttlMs;
     this.maxSessions = maxSessions;
+    this.signingSecret = String(signingSecret || '');
     this.sessions = new Map();
+    this.revoked = new Map();
   }
   #prune(now = Date.now()) {
     for (const [token, expiresAt] of this.sessions) if (expiresAt <= now) this.sessions.delete(token);
     while (this.sessions.size >= this.maxSessions) this.sessions.delete(this.sessions.keys().next().value);
+    for (const [token, expiresAt] of this.revoked) if (expiresAt <= now) this.revoked.delete(token);
+    while (this.revoked.size >= this.maxSessions) this.revoked.delete(this.revoked.keys().next().value);
+  }
+  #signedToken(issuedAt = Date.now()) {
+    const payload = `v1.${issuedAt}.${randomToken(18)}`;
+    const signature = crypto.createHmac('sha256', this.signingSecret).update(payload).digest('base64url');
+    return `${payload}.${signature}`;
+  }
+  #validSignedToken(token, now = Date.now()) {
+    const parts = String(token || '').split('.');
+    if (parts.length !== 4 || parts[0] !== 'v1' || !parts[1] || !parts[2] || !parts[3]) return false;
+    const issuedAt = Number(parts[1]);
+    if (!Number.isSafeInteger(issuedAt) || issuedAt > now || issuedAt + this.ttlMs <= now) return false;
+    const payload = parts.slice(0, 3).join('.');
+    const expected = crypto.createHmac('sha256', this.signingSecret).update(payload).digest('base64url');
+    const left = Buffer.from(parts[3]);
+    const right = Buffer.from(expected);
+    return left.length === right.length && crypto.timingSafeEqual(left, right);
   }
   create() {
+    if (this.signingSecret) return this.#signedToken();
     this.#prune();
     const token = randomToken();
     this.sessions.set(token, Date.now() + this.ttlMs);
@@ -102,6 +123,11 @@ export class SessionStore {
   }
   has(token) {
     if (!token) return false;
+    if (this.signingSecret) {
+      this.#prune();
+      if (this.revoked.has(String(token))) return false;
+      return this.#validSignedToken(token);
+    }
     const expiresAt = this.sessions.get(token);
     if (!expiresAt || expiresAt <= Date.now()) {
       if (token) this.sessions.delete(token);
@@ -109,8 +135,15 @@ export class SessionStore {
     }
     return true;
   }
-  delete(token) { this.sessions.delete(token); }
-  get size() { return this.sessions.size; }
+  delete(token) {
+    if (this.signingSecret) {
+      this.#prune();
+      if (token) this.revoked.set(String(token), Date.now() + this.ttlMs);
+      return;
+    }
+    this.sessions.delete(token);
+  }
+  get size() { return this.signingSecret ? this.revoked.size : this.sessions.size; }
 }
 
 export class SlidingRateLimit {

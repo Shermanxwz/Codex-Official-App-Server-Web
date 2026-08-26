@@ -45,6 +45,11 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(html, /id="contextUsage"/);
   assert.match(html, /id="contextUsageFill"/);
   assert.match(html, /id="contextUsageRemainingValue"/);
+  assert.match(html, /id="fullHistoryButton"/);
+  assert.match(html, /id="historySearchBar"/);
+  assert.match(html, /id="historySearchInput"/);
+  assert.match(html, /id="officialPlanDock"/);
+  assert.match(html, /id="autoScrollToggle"/);
   assert.match(app, /turn\/steer/);
   assert.match(app, /thread\/compact\/start/);
   assert.match(app, /thread\/compacted/);
@@ -66,6 +71,23 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /function readThreadForUi/);
   assert.match(app, /thread\/turns\/list/);
   assert.match(app, /itemsView:'full'/);
+  assert.match(app, /OFFICIAL_HISTORY_PAGE_SIZE/);
+  assert.match(app, /history-older-control/);
+  assert.match(app, /fullHistoryMode/);
+  assert.match(app, /turnDuration=turn=>/);
+  assert.match(app, /durationMs/);
+  assert.match(app, /historySearchQuery/);
+  assert.match(app, /Official search found \{count\} thread sections/);
+  assert.match(app, /thread\/searchOccurrences/);
+  assert.match(app, /running\?tr\('workInProgress'\)/);
+  assert.match(app, /contextUsageWaiting/);
+  assert.match(app, /AUTO_SCROLL_STORAGE_KEY/);
+  assert.match(app, /scrollBottomBeforeAutoScroll/);
+  assert.match(app, /renderOfficialPlanBottomCard/);
+  assert.match(css, /\.history-older-control/);
+  assert.match(css, /\.official-plan-dock/);
+  assert.match(css, /\.history-search/);
+  assert.match(css, /\.turn-header-detail\{display:inline/);
   assert.match(app, /function approvalInfo/);
   assert.match(app, /approvalCommandTitle/);
   assert.match(app, /approvalTechnical/);
@@ -84,6 +106,12 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /function adoptPendingTurnBlock/);
   assert.match(app, /data-pending-turn/);
   assert.match(app, /await restoreLastThread\(\)/);
+  assert.match(app, /runtimeBootId/);
+  assert.match(app, /startRuntimeRecoveryMonitor/);
+  assert.match(app, /probeRuntimeRecovery/);
+  assert.match(app, /state\.activeTurnId.*historyLoaded/);
+  assert.match(app, /active\.length!==1/);
+  assert.match(app, /olderControl=timeline\.querySelector\('\.history-older-control'\)/);
   assert.match(protocol, /turn\/diff\/updated/);
   assert.match(app, /kind==='ignore'/);
   assert.match(css, /grid-template-columns:minmax\(0,1fr\) auto/);
@@ -132,10 +160,20 @@ test('runtime server advertises the implemented MCP Apps profile and gates Dynam
   assert.match(server, /message\.method === 'currentTime\/read'/);
   assert.match(server, /function rejectDynamicToolRequest/);
   assert.match(server, /dynamic-tool-host-unconfigured/);
-  assert.match(server, /message\.method === 'turn\/diff\/updated'\) return/);
-  assert.match(config, /\['turn\/diff\/updated', \.\.\.list\('CWEB_NOTIFICATION_OPT_OUT'\)\]/);
+  assert.match(server, /if \(configured\) pushEvent\('serverRequestUnsupported'/);
+  assert.match(server, /HUMAN_IGNORED_NOTIFICATION_METHODS/);
+  assert.match(server, /turn\/diff\/updated.*turn\/moderationMetadata/);
+  assert.match(config, /\['turn\/diff\/updated', 'turn\/moderationMetadata', \.\.\.list\('CWEB_NOTIFICATION_OPT_OUT'\)\]/);
   assert.match(server, /function compactRpcError/);
   assert.doesNotMatch(server, /rpc: error\.rpc/);
+  assert.match(server, /new SessionStore\(12 \* 60 \* 60 \* 1000, 256, config\.token\)/);
+  assert.match(server, /runtimeBootId/);
+  assert.match(server, /runtimeStartedAt/);
+  assert.match(server, /pushEvent\('webRestarting'/);
+  assert.match(server, /transport: config\.codexTransport/);
+  assert.match(server, /persistentOfficialAppServer/);
+  assert.match(config, /CWEB_CODEX_TRANSPORT/);
+  assert.match(config, /CWEB_CODEX_SERVER_URL/);
 });
 
 test('Codex child transport failures have an explicit containment path', () => {
@@ -143,6 +181,8 @@ test('Codex child transport failures have an explicit containment path', () => {
   assert.match(client, /child\.stdin\.on\('error', failTransport\)/);
   assert.match(client, /emit\('transportError'/);
   assert.match(client, /try \{ child\.stdin\.write\(data\); \}/);
+  assert.match(client, /WebSocket backpressure limit reached/);
+  assert.match(client, /WebSocket message larger than/);
 });
 
 test('MCP Apps host bridge covers stable server tool/resource proxy surfaces', () => {

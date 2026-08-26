@@ -19,7 +19,7 @@ Node Web Gateway
   ├─ currentTime/read host responder
   └─ Dynamic Tool process host (optional, experimental)
               |
-           stdio JSONL
+           official WebSocket (Linux service) / stdio JSONL (portable)
               v
        official codex app-server
               |
@@ -33,7 +33,7 @@ At startup `OfficialSchemaRegistry` runs the installed Codex binary's `app-serve
 
 ## Browser event model
 
-The gateway converts official server notifications and non-host-managed ServerRequests into bounded SSE events. The browser keeps live item state keyed by official item id and re-reads authoritative thread state after reconnect rather than replaying uncertain writes. The UI groups non-message items into a compact work-process disclosure, routes an input during an active turn through official `turn/steer`, and surfaces official `thread/compacted` / `thread/compact/start` state without inventing a private conversation protocol.
+The gateway converts official server notifications and non-host-managed ServerRequests into bounded SSE events. The browser keeps live item state keyed by official item id and re-reads authoritative thread state after reconnect rather than replaying uncertain writes; the gateway exposes a per-boot runtime identity through `/api/meta` and `connected`, and recovery resumes/rejoins the remembered thread through official `thread/resume` before reading it, so a Web gateway restart does not require a new user message to restore the page. Linux deployment keeps the official App Server in a separate supervised WebSocket service; a gateway reconnect therefore does not own or terminate an in-flight official Turn. The UI groups non-message items into a compact work-process disclosure, routes an input during an active turn through official `turn/steer`, and surfaces official `thread/compacted` / `thread/compact/start` state without inventing a private conversation protocol. If the separately supervised official App Server itself is stopped or crashes, recovery never mislabels the terminated generation as still running.
 
 The gateway writes no append-only conversation or runtime log files. Its only runtime-owned persistent data is the generated official schema cache; startup maintenance removes only stale, exact-name `.tmp`/`.bak` swap artifacts from that cache. Official Codex session/history storage remains owned by the official runtime and is intentionally not pruned by this project.
 

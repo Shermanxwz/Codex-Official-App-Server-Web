@@ -45,6 +45,9 @@
       <div id="threadList" class="thread-list" role="list"></div>
 
       <div class="sidebar-footer">
+        <button id="fullHistoryButton" class="nav-button history-mode-button hidden" type="button" aria-pressed="false">
+          <span aria-hidden="true">◫</span><span id="fullHistoryLabel" data-i18n="fullHistory">历史完整会话</span>
+        </button>
         <button id="openProtocol" class="nav-button" type="button">
           <span>⌘</span><span data-i18n="protocol">官方接口</span>
         </button>
@@ -95,13 +98,22 @@
         </div>
       </section>
 
-      <section id="timeline" class="timeline hidden" aria-live="polite"></section>
+      <section id="timeline" class="timeline hidden" aria-live="polite">
+        <div id="historySearchBar" class="history-search hidden" role="search">
+          <label class="search-box">
+            <span aria-hidden="true">⌕</span>
+            <input id="historySearchInput" type="search" autocomplete="off" placeholder="搜索完整会话…">
+          </label>
+          <span id="historySearchMeta" class="history-search-meta"></span>
+        </div>
+      </section>
 
       <button id="jumpBottom" class="jump-bottom hidden" type="button" data-i18n="jumpBottom">回到底部 ↓</button>
 
       <section id="approvalTray" class="approval-tray" aria-live="assertive"></section>
 
       <footer class="composer-wrap">
+        <aside id="officialPlanDock" class="official-plan-dock hidden" aria-live="polite"></aside>
         <div id="composerCard" class="composer-card">
           <textarea id="prompt" rows="1" data-i18n-placeholder="prompt" placeholder="给 Codex 发送消息…" spellcheck="true"></textarea>
           <div id="attachmentTray" class="attachment-tray hidden" aria-live="polite"></div>
@@ -133,6 +145,11 @@
                 </div>
               </details>
               <span id="configSyncStatus" class="composer-sync-status" data-i18n="configSynced">已与 Codex 同步</span>
+              <button id="autoScrollToggle" class="composer-toggle" type="button" aria-pressed="true" title="自动滚动">
+                <span class="auto-scroll-icon" aria-hidden="true">↕</span>
+                <span id="autoScrollLabel" class="auto-scroll-label" data-i18n="autoScroll">自动滚动</span>
+                <span id="autoScrollState" aria-hidden="true">开</span>
+              </button>
               <button id="send" class="send-button" type="button" aria-label="Send">↑</button>
             </div>
           </div>

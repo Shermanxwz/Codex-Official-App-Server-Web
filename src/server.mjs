@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import http from 'node:http';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.mjs';
@@ -39,6 +40,15 @@ if (config.publicOrigin) {
   try { parsed = new URL(config.publicOrigin); } catch { parsed = null; }
   if (!parsed || !['http:', 'https:'].includes(parsed.protocol) || parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) {
     console.error('CWEB_PUBLIC_ORIGIN must be an exact http(s) origin with no path, query, fragment, or credentials.');
+    process.exit(2);
+  }
+}
+if (config.codexTransport === 'websocket') {
+  let parsed;
+  try { parsed = new URL(config.codexServerUrl); } catch { parsed = null; }
+  if (!parsed || !['ws:', 'wss:'].includes(parsed.protocol) || !isLoopbackHost(parsed.hostname)
+      || parsed.username || parsed.password || parsed.search || parsed.hash || (parsed.pathname && parsed.pathname !== '/')) {
+    console.error('CWEB_CODEX_SERVER_URL must be a loopback ws(s) URL without credentials, query, fragment, or path.');
     process.exit(2);
   }
 }
@@ -85,20 +95,32 @@ const clientCapabilities = {
   ...(config.notificationOptOut.length ? { optOutNotificationMethods: config.notificationOptOut } : {}),
 };
 
+// These notifications are useful to protocol clients but are never useful
+// conversation content. Filter them before schema mismatch reporting so an
+// older pinned schema cannot turn harmless upstream bookkeeping into UI noise.
+const HUMAN_IGNORED_NOTIFICATION_METHODS = new Set(['turn/diff/updated', 'turn/moderationMetadata']);
+
 const codex = new CodexAppServer({
   codexBin: config.codexBin, cwd: config.workspace, experimental: config.experimental,
+  transport: config.codexTransport, serverUrl: config.codexServerUrl,
   capabilities: clientCapabilities, timeoutMs: config.rpcTimeoutMs, maxPending: config.maxPendingRpc,
   maxServerRequests: config.maxPendingRpc, maxStdinBufferBytes: config.maxStdinBufferBytes,
   maxLineBytes: config.maxJsonlLineBytes,
 });
 
-const sessions = new SessionStore();
+// Sign the browser session with the private CWEB_TOKEN so a normal service
+// restart does not invalidate the page's SSE cookie. The token never enters
+// the Codex child environment; logout still records a bounded in-process
+// revocation until the cookie expires.
+const sessions = new SessionStore(12 * 60 * 60 * 1000, 256, config.token);
 const loginRate = new SlidingRateLimit(6, 60_000);
 const sseClients = new Set();
 let fatalCodexError = null;
 let restartTimer = null;
 let restartAttempt = 0;
 let eventSequence = 0;
+const runtimeBootId = randomUUID();
+const runtimeStartedAt = Date.now();
 const MACHINE_ONLY_SERVER_REQUESTS = new Set(PLATFORM_ONLY_SERVER_REQUESTS);
 
 const CODING_PROFILE_DENY = [
@@ -169,7 +191,11 @@ function rejectDynamicToolRequest(message, reason) {
     : `Dynamic Tool Host is not configured for ${namespace}:${tool}`;
   try { codex.respondError(message.id, { code: -32601, message: detail }); }
   catch { /* child may already be gone */ }
-  pushEvent('serverRequestUnsupported', {
+  // An unavailable dynamic tool is already answered with an official RPC
+  // error. Do not surface the host's internal rejection as a fake approval or
+  // a protocol card in the human-facing timeline. Configured-but-unregistered
+  // tools remain auditable; an entirely unconfigured host stays invisible.
+  if (configured) pushEvent('serverRequestUnsupported', {
     method: message.method, reason, message: detail, namespace, tool,
   });
   return true;
@@ -218,13 +244,11 @@ codex.on('serverRequest', (message) => {
 });
 
 codex.on('notification', (message) => {
+  if (HUMAN_IGNORED_NOTIFICATION_METHODS.has(message.method)) return;
   if (!registry.getServerNotification(message.method)) {
     pushEvent('protocolMismatch', { direction: 'serverNotification', method: message.method });
     return;
   }
-  // Older Codex builds may still emit this after initialization even when the
-  // client opted out. It is an internal aggregate, never a timeline item.
-  if (message.method === 'turn/diff/updated') return;
   pushEvent('notification', message);
 });
 codex.on('stderr', (line) => { const text = String(line).trim(); if (text) console.error(`[codex] ${text.slice(0, 4000)}`); });
@@ -310,6 +334,7 @@ async function api(req, res, url) {
     try { initializeResult = await codex.start(); } catch (error) { fatalCodexError = error.message; scheduleCodexRestart(); }
     return json(res, 200, {
       app: 'codex-app-server-web', version: APP_VERSION, workspace: config.workspace,
+      runtime: { bootId: runtimeBootId, startedAt: runtimeStartedAt },
       status: codex.isReady() && !fatalCodexError ? 'ready' : 'degraded', error: fatalCodexError,
       schema: registry.summary(), initializeResult, access: { profile: config.accessProfile }, protocolSupport: protocolSupportSummary(),
       capabilities: {
@@ -322,7 +347,8 @@ async function api(req, res, url) {
         platformOnlyServerRequests: [...MACHINE_ONLY_SERVER_REQUESTS],
       },
       contract: {
-        officialAppServerOnly: true, directCodexStateMutation: false, privateProtocol: false, transport: 'stdio',
+        officialAppServerOnly: true, directCodexStateMutation: false, privateProtocol: false, transport: config.codexTransport,
+        persistentOfficialAppServer: config.codexTransport === 'websocket',
         bidirectionalSchemaGate: true, codexEnvironmentSecretsStripped: true, accessPolicyGate: true,
         nativeItemTimeline: true, exactProtocolDispositionSeal: true, openaiFormNative: true,
         mcpAppsAdvertised: config.mcpAppsEnabled, mcpAppsDoubleIframeSandbox: true,
@@ -343,7 +369,7 @@ async function api(req, res, url) {
   if (pathname === '/api/events' && req.method === 'GET') {
     res.writeHead(200, secureHeaders({ 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' }));
     try { res.socket?.setNoDelay?.(true); } catch { /* ignore */ }
-    const connected = eventFrame('connected', { pendingServerRequests: codex.pendingServerRequests().filter((item) => !MACHINE_ONLY_SERVER_REQUESTS.has(item.method)), codexReady: codex.isReady(), eventSequence });
+    const connected = eventFrame('connected', { pendingServerRequests: codex.pendingServerRequests().filter((item) => !MACHINE_ONLY_SERVER_REQUESTS.has(item.method)), codexReady: codex.isReady(), eventSequence, runtimeBootId, runtimeStartedAt });
     writeSse(res, connected.frame); sseClients.add(res);
     const heartbeat = setInterval(() => { if (!writeSse(res, `: ping ${Date.now()}\n\n`)) clearInterval(heartbeat); }, 15_000);
     req.on('close', () => { clearInterval(heartbeat); sseClients.delete(res); });
@@ -386,7 +412,7 @@ async function api(req, res, url) {
 function errorStatus(error) {
   if (Number(error.status)) return Number(error.status);
   if (error.code === 'CODEX_RPC_TIMEOUT') return 504;
-  if (['CODEX_APP_SERVER_EXITED', 'CODEX_CLIENT_BUSY'].includes(error.code)) return 503;
+  if (['CODEX_APP_SERVER_EXITED', 'CODEX_CLIENT_BUSY', 'CODEX_WEBSOCKET_DISCONNECTED', 'WEBSOCKET_UNAVAILABLE'].includes(error.code)) return 503;
   if (error instanceof CodexRpcError) {
     if (error.rpc?.code === -32602) return 400;
     if (error.rpc?.code === -32001) return 503;
@@ -431,6 +457,7 @@ server.listen(config.port, config.host, async () => {
   console.log(`Codex: ${registry.version}`);
   console.log(`Official schema: ${registry.digest.slice(0, 16)} (${registry.requests.length} requests)`);
   console.log(`Access profile: ${config.accessProfile}`);
+  console.log(`Official transport: ${config.codexTransport}${config.codexTransport === 'websocket' ? ` ${config.codexServerUrl}` : ''}`);
   console.log(`MCP Apps Host: ${config.mcpAppsEnabled ? 'enabled' : 'disabled'}; Dynamic Tool Host: ${dynamicToolHost.size} configured`);
   try { await codex.start(); }
   catch (error) { fatalCodexError = error.message; console.error(`Codex App Server failed: ${error.message}`); scheduleCodexRestart(); }
@@ -439,6 +466,7 @@ server.listen(config.port, config.host, async () => {
 function shutdown(signal) {
   console.log(`Shutting down (${signal})`);
   if (restartTimer) clearTimeout(restartTimer);
+  pushEvent('webRestarting', { reason: 'service-shutdown', runtimeBootId });
   for (const res of [...sseClients]) {
     sseClients.delete(res);
     try { res.end(); } catch { try { res.destroy(); } catch { /* ignore */ } }

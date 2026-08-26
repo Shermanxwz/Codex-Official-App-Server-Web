@@ -6,7 +6,7 @@
 
 ## v0.4.0 封存边界
 
-- **只使用官方 App Server：**生产链路为本机 `codex app-server --listen stdio://` JSONL。
+- **只使用官方 App Server：**Linux 安装器把官方 `codex app-server --listen ws://127.0.0.1:43999` 作为独立 user service 运行，Web 网关通过官方 WebSocket 接入；便携手动启动仍支持 stdio 兼容模式。
 - **不维护手写 ClientRequest 白名单：**启动时同时生成官方 JSON Schema 与 TypeScript；JSON wire method 没有对应 TS 导出就 fail closed。
 - **Stable ClientRequest / ClientNotification 全量覆盖：**`initialize` / `initialized` 由网关管理，其余官方导出方法全部经过 schema gate，可从原生 UI 或“官方接口”面板调用。
 - **ServerRequest 有明确宿主处置：**审批、用户输入、MCP elicitation、权限、Dynamic Tool，以及 experimental 外部时钟请求都进入明确 Host 流程；平台专属 token refresh / attestation 不进入浏览器信任边界。
@@ -45,7 +45,13 @@ Host 页面
 
 ## Web 产品能力
 
-原生界面包括历史/read/resume、实时 Turn/Item、流式 delta、模型与 reasoning、interrupt、命令/文件/权限审批、用户输入、MCP elicitation、断线权威重同步，以及 MCP App 渲染。执行项会像 Codex 一样收进默认折叠的“工作过程”，主回答保持在对话主线上；活动 Turn 中继续输入会走官方 `turn/steer` 调整方向，手动上下文整理走官方 `thread/compact/start`，并显示压缩动画。其余不常用官方方法仍可在 **官方接口** Drawer 中按当前官方 schema 直接调用。
+原生界面包括历史/read/resume、官方 `thread/turns/list` 分页与懒加载、侧边栏“历史完整会话”模式、完整历史关键词筛选、实时 Turn/Item、流式 delta、模型与 reasoning、官方 Turn 处理时长、interrupt、命令/文件/权限审批、用户输入、MCP elicitation、断线权威重同步，以及 MCP App 渲染。执行项会像 Codex 一样收进默认折叠的“工作过程”，主回答保持在对话主线上；官方返回非空计划时，计划卡固定在输入框上方，桌面端悬停/聚焦查看步骤，触屏端点击展开；活动 Turn 中继续输入会走官方 `turn/steer` 调整方向，手动上下文整理走官方 `thread/compact/start`，并显示压缩动画。运行中标题、停止按钮、调整方向和上下文仪表均由真实官方 Turn/usage 事件驱动，空闲时不伪造运行状态。其余不常用官方方法仍可在 **官方接口** Drawer 中按当前官方 schema 直接调用。
+
+当前固定的 Codex 官方协议提供 `thread/turns/list`、`thread/items/list` 分页和 `thread/searchOccurrences` 官方全文检索。完整历史模式会沿官方游标读取到结束；搜索以官方 occurrence 索引为主，并补充已经渲染的工作过程文本，不伪造 ChatGPT 私有接口。每一页单独请求，整段会话不会被拼成一条 128 MiB JSONL。普通会话启动时只读最近一页，旧内容按需加载，不会隐式进入完整历史模式。
+
+每次网关启动都会生成运行代际标识，并同时通过 `/api/meta`、SSE `connected` 帧提供。浏览器在 SSE 断线重连、页面重新获得焦点或检测到代际变化时，自动重新连接并用官方 `thread/resume`、分页历史和待处理请求恢复页面，不需要用户再发送一条消息。Linux 安装器把官方 App Server 放在独立的 `codex-official-app-server.service` 中，网关重启不会终止官方 Turn；重连后通过官方权威状态和历史重新接管，断线期间没有缓存的增量不会被伪造重放。若官方 App Server 自身被停止、崩溃或机器关机，操作系统仍会终止正在生成的 Turn；官方协议没有把已被终止的模型生成凭空续跑的接口。
+
+`CWEB_CODEX_TRANSPORT=websocket` 与 `CWEB_CODEX_SERVER_URL` 控制持久官方传输。WebSocket 端点只接受 loopback `ws(s)` 地址，官方服务单元不接收 Web 会话令牌或其他 `CWEB_*` 配置。`npm start` 未安装独立服务时仍默认为 stdio；要获得重启后继续接管的行为，应使用 `scripts/install-linux.sh` 安装的双服务部署。
 
 网关不把聊天历史、模型输出或运行日志复制到项目目录；持久会话数据仍由官方 Codex Runtime 管理。项目只维护官方 schema 缓存，启动时会自动删除自己生成且已过期的 schema 交换 `.tmp/.bak` 临时物；`scripts/prune-state.mjs` 可手动执行同一清理。它不会自动删除 `~/.codex` 中的官方会话历史，避免误删用户数据。
 
@@ -75,12 +81,14 @@ npm start
 | `CWEB_HOST` | `127.0.0.1` | HTTP bind |
 | `CWEB_PORT` | `4173` | HTTP 端口 |
 | `CWEB_CODEX_BIN` | `codex` | 官方 Codex 可执行文件 |
+| `CWEB_CODEX_TRANSPORT` | `stdio` | `stdio` 或 `websocket`；Linux 安装器默认写入 `websocket` |
+| `CWEB_CODEX_SERVER_URL` | `ws://127.0.0.1:43999` | 独立官方 App Server 的 loopback WebSocket 地址 |
 | `CWEB_WORKSPACE` | 当前目录 | 初始工作区 |
 | `CWEB_REQUIRE_AUTH` | `1` | Web 鉴权 |
 | `CWEB_TOKEN` | 空 | 开启鉴权时必填 |
 | `CWEB_PUBLIC_ORIGIN` | 空 | 可信公网 exact origin |
 | `CWEB_ACCESS_PROFILE` | `full` | `read` / `coding` / `admin` / `full` |
-| `CWEB_EXPERIMENTAL` | `0` | 开启官方 experimental API |
+| `CWEB_EXPERIMENTAL` | `1` | 开启官方 experimental API（分页历史依赖此官方握手）；设为 `0` 可强制仅稳定协议回退 |
 | `CWEB_MCP_APPS` | `1` | 声明并渲染稳定 MCP Apps 扩展 |
 | `CWEB_MCP_APP_PERMISSIONS` | 空 | 可选权限 allow-list；最终仍受浏览器 secure-context / Permissions Policy 约束 |
 | `CWEB_DYNAMIC_TOOLS_FILE` | 空 | Dynamic Tool Host v1 JSON；要求 `CWEB_EXPERIMENTAL=1` |
@@ -96,7 +104,7 @@ MCP Apps 和 Dynamic Tool 的详细契约见 [docs/HOSTS.md](docs/HOSTS.md)。
 ./scripts/install-linux.sh
 ```
 
-安装器只写项目自己的 XDG config/state 与 systemd user service；不会安装、升级、登录或直接修改 Codex。
+安装器只写项目自己的 XDG config/state 与两个 systemd user service；会复用现有官方 Codex 可执行文件启动独立 App Server，但不会安装、升级、登录或直接修改 Codex。
 
 ## 封存检查
 

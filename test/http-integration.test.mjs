@@ -46,6 +46,7 @@ test('full HTTP gateway admits only methods exported by official schema', async(
   const login=await fetch(`${url}/api/login`,{method:'POST',headers:{'content-type':'application/json',origin},body:JSON.stringify({token})});
   assert.equal(login.status,200,logs); const cookie=login.headers.get('set-cookie').split(';',1)[0];
   assert.equal((await fetch(`${url}/healthz`)).status,200); assert.equal((await fetch(`${url}/readyz`)).status,200);
+  const meta=await (await fetch(`${url}/api/meta`,{headers:{cookie}})).json(); assert.match(meta.runtime.bootId,/^[0-9a-f-]{36}$/); assert.equal(typeof meta.runtime.startedAt,'number');
   const methods=await (await fetch(`${url}/api/methods`,{headers:{cookie}})).json(); assert.deepEqual(methods.requests.map(x=>x.method),['initialize','thread/list']);
   assert.equal(methods.requests.find(x=>x.method==='initialize').managed,true);
   const schema=await (await fetch(`${url}/api/method-schema?kind=requests&method=${encodeURIComponent('thread/list')}`,{headers:{cookie}})).json();
