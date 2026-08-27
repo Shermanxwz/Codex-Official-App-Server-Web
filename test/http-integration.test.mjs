@@ -36,6 +36,32 @@ process.exit(2);
 `,{mode:0o755}); return file;
 }
 
+function fakeTurnStartDedupeCodex(dir){
+  const file=path.join(dir,'codex');
+  fs.writeFileSync(file,`#!/usr/bin/env node
+const fs=require('node:fs'), path=require('node:path'), readline=require('node:readline');
+const args=process.argv.slice(2);
+if(args[0]==='--version'){console.log('codex-cli 9.9.9-dedupe-test');process.exit(0)}
+if(args[0]==='app-server'&&args[1]==='generate-json-schema'){
+ const out=args[args.indexOf('--out')+1];fs.mkdirSync(out,{recursive:true});
+ const variant=(method,ref)=>({title:method,properties:{id:{},method:{enum:[method]},params:{$ref:'#/definitions/'+ref}},required:['id','method','params']});
+ const req={definitions:{InitializeParams:{type:'object',properties:{clientInfo:{type:'object'}}},TurnStartParams:{type:'object',properties:{threadId:{type:'string'},input:{type:'array'},clientUserMessageId:{type:['string','null']}},required:['threadId','input']}},oneOf:[variant('initialize','InitializeParams'),variant('turn/start','TurnStartParams')]};
+ const empty={definitions:{},oneOf:[]};
+ for(const [name,data] of [['ClientRequest.json',req],['ClientNotification.json',empty],['ServerRequest.json',empty],['ServerNotification.json',empty]])fs.writeFileSync(path.join(out,name),JSON.stringify(data));process.exit(0);
+}
+if(args[0]==='app-server'&&args[1]==='generate-ts'){
+ const out=args[args.indexOf('--out')+1];fs.mkdirSync(out,{recursive:true});
+ fs.writeFileSync(path.join(out,'ClientRequest.ts'),'export type ClientRequest={"method":"initialize"}|{"method":"turn/start"};');
+ for(const name of ['ClientNotification.ts','ServerRequest.ts','ServerNotification.ts'])fs.writeFileSync(path.join(out,name),'export type Empty=never;');process.exit(0);
+}
+if(args[0]==='app-server'){
+ let starts=0;const rl=readline.createInterface({input:process.stdin});
+ rl.on('line',line=>{const m=JSON.parse(line);if(m.method==='initialize')return console.log(JSON.stringify({id:m.id,result:{codexHome:'/fake',platformFamily:'unix',platformOs:'linux'}}));if(m.method==='initialized')return;if(m.method==='turn/start'){const count=++starts;return setTimeout(()=>console.log(JSON.stringify({id:m.id,result:{turn:{id:'turn-'+count,status:'inProgress'},count}})),30)}if(m.id!==undefined)console.log(JSON.stringify({id:m.id,result:{}}));});return;
+}
+process.exit(2);
+`,{mode:0o755});return file;
+}
+
 function fakeActiveWriterCodex(dir){
   const file=path.join(dir,'codex');
   fs.writeFileSync(file,`#!/usr/bin/env node
@@ -91,6 +117,18 @@ test('full HTTP gateway admits only methods exported by official schema', async(
   });
   await events.body?.cancel();
   assert.equal(exited.code,0,logs);
+});
+
+test('repeating one Web turn/start id reuses the in-flight official result', async(t)=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cweb-turn-dedupe-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const codex=fakeTurnStartDedupeCodex(dir),port=await getFreePort(),url=`http://127.0.0.1:${port}`,token='turn-dedupe-test-token';let logs='';
+  const child=spawn(process.execPath,['src/server.mjs'],{cwd:root,env:{...process.env,CWEB_CODEX_BIN:codex,CWEB_STATE_DIR:path.join(dir,'state'),CWEB_WORKSPACE:dir,CWEB_HOST:'127.0.0.1',CWEB_PORT:String(port),CWEB_REQUIRE_AUTH:'1',CWEB_TOKEN:token,CWEB_MCP_APPS:'0'},stdio:['ignore','pipe','pipe']});
+  child.stdout.on('data',x=>logs+=x);child.stderr.on('data',x=>logs+=x);t.after(()=>{if(child.exitCode===null)child.kill('SIGTERM')});await waitReady(url,child);
+  const origin=url,login=await fetch(url+'/api/login',{method:'POST',headers:{'content-type':'application/json',origin},body:JSON.stringify({token})});assert.equal(login.status,200,logs);const cookie=login.headers.get('set-cookie').split(';',1)[0];
+  const send=clientUserMessageId=>fetch(url+'/api/rpc',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'turn/start',params:{threadId:'thread-1',input:[{type:'text',text:'dedupe',text_elements:[]}],clientUserMessageId}})});
+  const [first,second]=await Promise.all([send('web-dedupe-1'),send('web-dedupe-1')]);assert.equal(first.status,200,logs);assert.equal(second.status,200,logs);const a=await first.json(),b=await second.json();assert.equal(a.result.count,1);assert.equal(b.result.count,1);assert.equal(a.result.turn.id,b.result.turn.id);
+  const third=await send('web-dedupe-2');assert.equal(third.status,200,logs);assert.equal((await third.json()).result.count,2);
+  child.kill('SIGTERM');await new Promise(resolve=>child.once('exit',resolve));
 });
 
 test('multiple SSE clients stay independent when one client disconnects', async(t)=>{

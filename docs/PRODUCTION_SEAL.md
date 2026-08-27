@@ -11,6 +11,16 @@
 - crashes clear stale ServerRequests and restart with bounded exponential delay;
 - shutdown terminates only owned children.
 
+## Web delivery and live-state invariants
+
+- every Web `turn/start` carries an official client message id and a persisted, bounded pending-submission record; live `turn/steer` submissions also carry the same official identifier class;
+- the gateway keeps only a bounded, expiring result cache for repeated `turn/start`/`turn/steer` requests with the same thread and official client message id;
+- an ambiguous transport result is quarantined and reconciled through official paginated history; the client never retries an unknown submission automatically;
+- a confirmed submission clears the composer exactly once, while a definite rejection removes only its optimistic message and leaves a deliberate retry path;
+- active duration is derived from the official start timestamp and ticks locally only while the official/local Turn is active; terminal Turns stop the clock;
+- live Turn items are retained and merged into the terminal representation, so the completed work process is not discarded when a summary Turn is replaced;
+- delivery state, pending timers, and live-item caches are scoped to a thread and cleaned when that thread is cleared.
+
 ## Protocol invariants
 
 - official JSON and TypeScript exports are regenerated from the installed Codex binary;

@@ -147,6 +147,13 @@ const loginRate = new SlidingRateLimit(6, 60_000);
 // Each browser gets an independent bounded queue. A slow mobile connection
 // must never make another Web tab lose its event stream.
 const sseClients = new Map();
+// A lost HTTP response must not turn a single accepted turn/start or turn/steer
+// into a second upstream request when the client retries with the same official
+// clientUserMessageId. This is an in-memory, bounded result cache: it never
+// edits Codex history and expires well before a normal browser session.
+const TURN_START_DEDUPE_TTL_MS = 10 * 60 * 1000;
+const TURN_START_DEDUPE_MAX = 1024;
+const turnStartDedupe = new Map();
 let fatalCodexError = null;
 let restartTimer = null;
 let restartAttempt = 0;
@@ -154,6 +161,40 @@ let eventSequence = 0;
 const runtimeBootId = randomUUID();
 const runtimeStartedAt = Date.now();
 const MACHINE_ONLY_SERVER_REQUESTS = new Set(PLATFORM_ONLY_SERVER_REQUESTS);
+
+function turnStartDedupeKey(method, params) {
+  if (method !== 'turn/start' && method !== 'turn/steer') return '';
+  const threadId = String(params?.threadId || '');
+  const clientUserMessageId = String(params?.clientUserMessageId || '');
+  if (!threadId || !clientUserMessageId || clientUserMessageId.length > 256) return '';
+  return JSON.stringify([threadId, clientUserMessageId]);
+}
+
+function pruneTurnStartDedupe(now = Date.now()) {
+  for (const [key, entry] of turnStartDedupe) if (entry.expiresAt <= now) turnStartDedupe.delete(key);
+  while (turnStartDedupe.size > TURN_START_DEDUPE_MAX) turnStartDedupe.delete(turnStartDedupe.keys().next().value);
+}
+
+async function requestOfficial(method, params) {
+  const key = turnStartDedupeKey(method, params);
+  if (!key) return codex.request(method, params);
+  const now = Date.now();
+  pruneTurnStartDedupe(now);
+  const existing = turnStartDedupe.get(key);
+  if (existing && existing.expiresAt > now) {
+    turnStartDedupe.delete(key);
+    turnStartDedupe.set(key, existing);
+    return existing.promise;
+  }
+  const entry = { expiresAt: now + TURN_START_DEDUPE_TTL_MS, promise: codex.request(method, params) };
+  turnStartDedupe.set(key, entry);
+  pruneTurnStartDedupe(now);
+  try { return await entry.promise; }
+  catch (error) {
+    if (turnStartDedupe.get(key) === entry) turnStartDedupe.delete(key);
+    throw error;
+  }
+}
 
 const CODING_PROFILE_DENY = [
   /^account\/(login|logout|chatgptAuthTokens)/,
@@ -516,7 +557,7 @@ async function api(req, res, url) {
       return json(res, 403, { error: 'METHOD_BLOCKED_BY_ACCESS_PROFILE', method: body.method, profile: config.accessProfile });
     }
     let result;
-    try { result = await codex.request(body.method, managedParams(body.method, body.params ?? {})); }
+    try { result = await requestOfficial(body.method, managedParams(body.method, body.params ?? {})); }
     catch (error) {
       // A thread owned by another official client is still perfectly readable.
       // Treat every active-writer collision as an explicit read-only conflict

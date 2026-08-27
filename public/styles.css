@@ -91,6 +91,14 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
 @media(max-width:980px){.composer-sync-status{display:none}}
 @media(max-width:760px){.capability-group-body{max-height:240px}.imagePasteHint{display:none}.composer-hint-secondary{display:none}}
 
+/* A send whose HTTP response was lost is visibly pending instead of looking
+   like a normal draft. The composer remains usable for copying/editing, but
+   the send action is locked until the official runtime confirms the outcome. */
+.delivery-status{display:block;min-height:14px;margin:1px 3px 5px;color:var(--muted);font-size:9px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.delivery-status.pending{color:var(--warn)}
+.delivery-status.retryable{color:var(--bad)}
+@media(max-width:760px){.delivery-status{margin:0 3px 4px;font-size:10px}}
+
 /* Codex-like conversation rhythm: answer first, execution behind one compact disclosure. */
 .turn-block{gap:11px;margin-bottom:28px}
 .turn-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 4px;color:var(--muted);font-size:10px}
