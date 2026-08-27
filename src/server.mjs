@@ -154,6 +154,14 @@ const sseClients = new Map();
 const TURN_START_DEDUPE_TTL_MS = 10 * 60 * 1000;
 const TURN_START_DEDUPE_MAX = 1024;
 const turnStartDedupe = new Map();
+// `turn/plan/updated` is an event snapshot, not a persisted Turn item. Keep
+// only the currently active snapshots so a fresh Web tab can reconstruct the
+// official plan after an SSE reconnect without replaying arbitrary history.
+const OFFICIAL_PLAN_REPLAY_TTL_MS = 2 * 60 * 60 * 1000;
+const OFFICIAL_PLAN_REPLAY_MAX = 256;
+const OFFICIAL_PLAN_REPLAY_BYTES = 512 * 1024;
+const OFFICIAL_PLAN_TERMINAL_METHODS = new Set(['turn/completed', 'turn/failed', 'turn/error', 'turn/interrupted', 'turn/aborted', 'turn/cancelled', 'turn/canceled', 'turn/stopped']);
+const activeOfficialPlans = new Map();
 let fatalCodexError = null;
 let restartTimer = null;
 let restartAttempt = 0;
@@ -194,6 +202,62 @@ async function requestOfficial(method, params) {
     if (turnStartDedupe.get(key) === entry) turnStartDedupe.delete(key);
     throw error;
   }
+}
+
+function officialPlanIdentity(message) {
+  const params = message?.params || {};
+  const threadId = String(params.threadId || params.thread?.id || params.turn?.threadId || '');
+  const turnId = String(params.turnId || params.turn?.id || '');
+  return { threadId, turnId, key: threadId && turnId ? `${threadId}:${turnId}` : '' };
+}
+
+function pruneOfficialPlanReplay(now = Date.now()) {
+  for (const [key, entry] of activeOfficialPlans) if (entry.expiresAt <= now) activeOfficialPlans.delete(key);
+  while (activeOfficialPlans.size > OFFICIAL_PLAN_REPLAY_MAX) activeOfficialPlans.delete(activeOfficialPlans.keys().next().value);
+}
+
+function rememberOfficialPlanReplay(message) {
+  const { threadId, turnId, key } = officialPlanIdentity(message);
+  if (!key || !Array.isArray(message?.params?.plan)) return;
+  const snapshot = { method: 'turn/plan/updated', params: { ...message.params, threadId, turnId } };
+  const bytes = Buffer.byteLength(JSON.stringify(snapshot));
+  if (bytes > OFFICIAL_PLAN_REPLAY_BYTES) return;
+  activeOfficialPlans.delete(key);
+  activeOfficialPlans.set(key, { expiresAt: Date.now() + OFFICIAL_PLAN_REPLAY_TTL_MS, message: snapshot });
+  pruneOfficialPlanReplay();
+}
+
+function forgetOfficialPlanReplay({ threadId = '', turnId = '' } = {}) {
+  const thread = String(threadId || ''), turn = String(turnId || '');
+  if (thread && turn) { activeOfficialPlans.delete(`${thread}:${turn}`); return; }
+  if (thread) for (const key of activeOfficialPlans.keys()) if (key.startsWith(`${thread}:`)) activeOfficialPlans.delete(key);
+  else if (turn) for (const key of activeOfficialPlans.keys()) if (key.endsWith(`:${turn}`)) activeOfficialPlans.delete(key);
+}
+
+function officialStatusKey(value) {
+  return String(value?.type || value || '').toLowerCase().replace(/[\s_-]/g, '');
+}
+
+function observeOfficialPlanLifecycle(message) {
+  const method = String(message?.method || ''), params = message?.params || {}, { threadId, turnId } = officialPlanIdentity(message);
+  if (method === 'turn/plan/updated') { rememberOfficialPlanReplay(message); return; }
+  if (OFFICIAL_PLAN_TERMINAL_METHODS.has(method)) { forgetOfficialPlanReplay({ threadId, turnId }); return; }
+  if (method === 'thread/status/changed') {
+    const status = params.status || params.state || params.thread?.status;
+    if (status && !['active', 'running', 'inprogress', 'working', 'progress'].includes(officialStatusKey(status))) forgetOfficialPlanReplay({ threadId });
+  }
+}
+
+function activeOfficialPlanNotifications(now = Date.now()) {
+  pruneOfficialPlanReplay(now);
+  const result = [], budget = OFFICIAL_PLAN_REPLAY_BYTES;
+  let bytes = 0;
+  for (const entry of activeOfficialPlans.values()) {
+    const message = entry.message, size = Buffer.byteLength(JSON.stringify(message));
+    if (bytes + size > budget) continue;
+    result.push(message); bytes += size;
+  }
+  return result;
 }
 
 const CODING_PROFILE_DENY = [
@@ -403,6 +467,7 @@ codex.on('notification', (message) => {
     pushEvent('protocolMismatch', { direction: 'serverNotification', method: message.method });
     return;
   }
+  observeOfficialPlanLifecycle(message);
   pushEvent('notification', message);
 });
 codex.on('stderr', (line) => { const text = String(line).trim(); if (text) console.error(`[codex] ${text.slice(0, 4000)}`); });
@@ -413,11 +478,12 @@ codex.on('startError', ({ error, generation, pid, pendingMethods }) => {
   console.error(`[codex] start failed pid=${pid ?? 'unknown'} generation=${generation} code=${error?.code || 'unknown'} pending=${(pendingMethods || []).join(',') || 'none'}: ${error?.message || error}`);
 });
 codex.on('exit', (value) => {
+  activeOfficialPlans.clear();
   console.error(`[codex] child exited pid=${value.pid ?? 'unknown'} code=${value.code ?? 'null'} signal=${value.signal ?? 'null'} killed=${value.killed ? 'yes' : 'no'} pending=${(value.pendingMethods || []).join(',') || 'none'}`);
   pushEvent('codexExit', value);
 });
 codex.on('ready', (initialize) => { fatalCodexError = null; restartAttempt = 0; pushEvent('codexReady', { initialize }); });
-codex.on('crash', (error) => { fatalCodexError = error.message; pushEvent('codexError', { message: error.message, code: error.code || null }); scheduleCodexRestart(); });
+codex.on('crash', (error) => { activeOfficialPlans.clear(); fatalCodexError = error.message; pushEvent('codexError', { message: error.message, code: error.code || null }); scheduleCodexRestart(); });
 
 function scheduleCodexRestart() {
   if (restartTimer) return;
@@ -537,7 +603,7 @@ async function api(req, res, url) {
     try { res.socket?.setNoDelay?.(true); } catch { /* ignore */ }
     const client = { res, queue: [], queuedBytes: 0, blocked: false, drainListener: null };
     sseClients.set(res, client);
-    const connected = eventFrame('connected', { pendingServerRequests: codex.pendingServerRequests().filter((item) => !MACHINE_ONLY_SERVER_REQUESTS.has(item.method)), codexReady: codex.isReady(), eventSequence, runtimeBootId, runtimeStartedAt });
+    const connected = eventFrame('connected', { pendingServerRequests: codex.pendingServerRequests().filter((item) => !MACHINE_ONLY_SERVER_REQUESTS.has(item.method)), activePlans: activeOfficialPlanNotifications(), codexReady: codex.isReady(), eventSequence, runtimeBootId, runtimeStartedAt });
     writeSse(res, connected.frame);
     const heartbeat = setInterval(() => { if (!writeSse(res, `: ping ${Date.now()}\n\n`)) clearInterval(heartbeat); }, 15_000);
     heartbeat.unref?.();

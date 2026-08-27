@@ -325,6 +325,7 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
 .history-older-control.loading{cursor:wait}
 .history-older-control.loading::before{content:'';width:11px;height:11px;margin-right:7px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:history-loading-spin .8s linear infinite}
 .history-page-marker{position:sticky;top:0;z-index:5;width:fit-content;max-width:100%;margin:0 auto 8px;padding:4px 10px;border:1px solid color-mix(in srgb,var(--line) 78%,transparent);border-radius:999px;background:color-mix(in srgb,var(--bg) 94%,var(--soft));backdrop-filter:blur(12px);color:var(--muted);font-size:9px;line-height:1.4;text-align:center}
+.history-mode-marker{position:sticky;top:0;z-index:4;width:fit-content;max-width:100%;margin:0 auto 14px;padding:4px 10px;border:1px solid color-mix(in srgb,var(--line) 72%,transparent);border-radius:999px;background:color-mix(in srgb,var(--bg) 94%,var(--soft));backdrop-filter:blur(12px);color:var(--muted);font-size:9px;line-height:1.4;text-align:center}
 .history-page-marker.with-search{top:46px}
 .history-older-control.with-page-marker{top:34px}
 .history-older-control.with-search.with-page-marker{top:80px}

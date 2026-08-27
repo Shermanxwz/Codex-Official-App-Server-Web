@@ -97,7 +97,11 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /olderControl\.nextSibling/);
   assert.match(app, /const QUICK_HISTORY_PAGE_SIZE=10/);
   assert.match(app, /const FULL_HISTORY_PAGE_SIZE=10/);
-  assert.match(app, /if\(!state\.fullHistoryMode\|\|!pager\?\.hasMore\)return/);
+  assert.match(app, /historyQuickBoundary/);
+  assert.match(app, /explicitSelection/);
+  assert.match(app, /renderQuickHistoryMarker/);
+  assert.match(app, /if\(!state\.fullHistoryMode\)\{renderQuickHistoryMarker\(\);return\}/);
+  assert.match(app, /if\(!pager\?\.hasMore\)return/);
   assert.match(app, /thread\/turns\/list/);
   assert.match(app, /itemsView:'summary'/);
   assert.match(app, /thread\/items\/list/);
@@ -125,6 +129,10 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /officialPlanExpandedTurnId/);
   assert.match(app, /officialActiveTurnId/);
   assert.match(app, /officialThreadActive/);
+  assert.match(app, /officialPlanReplayByThread/);
+  assert.match(app, /replayOfficialPlanNotifications/);
+  assert.match(app, /function cacheOfficialPlanNotification/);
+  assert.match(app, /Array\.isArray\(payload\?\.plan\)&&payload\.plan\.length===0/);
   assert.match(app, /classifyOfficialActivity/);
   assert.match(app, /control:\{webWriteEnabled:true/);
   assert.doesNotMatch(app, /desktopWriteProtection|controlDesktopGuardEnabled|桌面占用保护|Desktop ownership guard/);
@@ -174,7 +182,7 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /function invalidateThreadHistory/);
   assert.match(app, /function runThreadOperation/);
   assert.match(app, /threadOperationBusy/);
-  assert.match(app, /readThreadForUi\(id,\{force,signal:controller\.signal\}\)/);
+  assert.match(app, /readThreadForUi\(id,\{force:force\|\|explicitSelection,signal:controller\.signal\}\)/);
   assert.doesNotMatch(app, /if\(!force\)await ensureThreadLoaded/);
   assert.match(protocol, /turn\/diff\/updated/);
   assert.match(app, /kind==='ignore'/);
@@ -221,6 +229,9 @@ test('runtime server advertises the implemented MCP Apps profile and gates Dynam
   assert.match(server, /TURN_START_DEDUPE_TTL_MS/);
   assert.match(server, /method !== 'turn\/start' && method !== 'turn\/steer'/);
   assert.match(server, /return existing\.promise/);
+  assert.match(server, /OFFICIAL_PLAN_REPLAY_TTL_MS/);
+  assert.match(server, /activeOfficialPlanNotifications/);
+  assert.match(server, /activePlans: activeOfficialPlanNotifications\(\)/);
   assert.match(server, /mcpAppsDoubleIframeSandbox:\s*true/);
   assert.match(server, /CWEB_DYNAMIC_TOOLS_FILE requires CWEB_EXPERIMENTAL=1/);
   assert.match(server, /properties\?\.dynamicTools/);

@@ -62,6 +62,32 @@ process.exit(2);
 `,{mode:0o755});return file;
 }
 
+function fakePlanReplayCodex(dir){
+  const file=path.join(dir,'codex');
+  fs.writeFileSync(file,`#!/usr/bin/env node
+const fs=require('node:fs'), path=require('node:path'), readline=require('node:readline');
+const args=process.argv.slice(2);
+if(args[0]==='--version'){console.log('codex-cli 9.9.9-plan-replay-test');process.exit(0)}
+if(args[0]==='app-server'&&args[1]==='generate-json-schema'){
+ const out=args[args.indexOf('--out')+1];fs.mkdirSync(out,{recursive:true});
+ const request=(method,ref)=>({title:method,properties:{id:{},method:{enum:[method]},params:{$ref:'#/definitions/'+ref}},required:['id','method','params']});
+ const req={definitions:{InitializeParams:{type:'object'}},oneOf:[request('initialize','InitializeParams')]};
+ const empty={definitions:{},oneOf:[]};
+ const note={definitions:{TurnPlanUpdatedNotification:{type:'object',properties:{threadId:{type:'string'},turnId:{type:'string'},plan:{type:'array'}},required:['threadId','turnId','plan']}},oneOf:[{title:'TurnPlanUpdatedNotification',properties:{method:{enum:['turn/plan/updated']},params:{$ref:'#/definitions/TurnPlanUpdatedNotification'}},required:['method','params']}]};
+ for(const [name,data] of [['ClientRequest.json',req],['ClientNotification.json',empty],['ServerRequest.json',empty],['ServerNotification.json',note]])fs.writeFileSync(path.join(out,name),JSON.stringify(data));process.exit(0);
+}
+if(args[0]==='app-server'&&args[1]==='generate-ts'){
+ const out=args[args.indexOf('--out')+1];fs.mkdirSync(out,{recursive:true});
+ for(const [name,data] of Object.entries({'ClientRequest.ts':'export type ClientRequest={"method":"initialize"};','ClientNotification.ts':'export type Empty=never;','ServerRequest.ts':'export type Empty=never;','ServerNotification.ts':'export type ServerNotification={"method":"turn/plan/updated"};'}))fs.writeFileSync(path.join(out,name),data);process.exit(0);
+}
+if(args[0]==='app-server'){
+ const rl=readline.createInterface({input:process.stdin});
+ rl.on('line',line=>{const m=JSON.parse(line);if(m.method==='initialize'){console.log(JSON.stringify({id:m.id,result:{codexHome:'/fake',platformFamily:'unix',platformOs:'linux'}}));return setTimeout(()=>console.log(JSON.stringify({method:'turn/plan/updated',params:{threadId:'thread-1',turnId:'turn-1',plan:[{step:'One',status:'inProgress'}]}})),1500)}if(m.method==='initialized')return;if(m.id!==undefined)console.log(JSON.stringify({id:m.id,result:{}}));});return;
+}
+process.exit(2);
+`,{mode:0o755});return file;
+}
+
 function fakeActiveWriterCodex(dir){
   const file=path.join(dir,'codex');
   fs.writeFileSync(file,`#!/usr/bin/env node
@@ -90,6 +116,7 @@ process.exit(2);
 }
 async function waitReady(url, child){let logs='';child.stderr?.on('data',x=>logs+=x);child.stdout?.on('data',x=>logs+=x);for(let i=0;i<80;i++){if(child.exitCode!==null)throw new Error(`server exited ${child.exitCode}\n${logs}`);try{const r=await fetch(`${url}/readyz`);if(r.status===200)return;}catch{}await new Promise(r=>setTimeout(r,50));}throw new Error(`server/app-server did not become ready\n${logs}`);}
 function sseReader(response){const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';return{async next(){for(;;){const boundary=buffer.indexOf('\n\n');if(boundary>=0){const frame=buffer.slice(0,boundary);buffer=buffer.slice(boundary+2);const data=frame.split('\n').filter(line=>line.startsWith('data:')).map(line=>line.slice(5).trimStart()).join('\n');if(data)return JSON.parse(data);continue}const chunk=await reader.read();if(chunk.done)return null;buffer+=decoder.decode(chunk.value,{stream:true})}},cancel(){return reader.cancel()}}}
+function sseNextWithTimeout(reader,ms=5000){let timer;return Promise.race([reader.next(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(`SSE event timeout after ${ms}ms`)),ms)})]).finally(()=>clearTimeout(timer))}
 
 test('full HTTP gateway admits only methods exported by official schema', async(t)=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cweb-http-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
@@ -128,6 +155,20 @@ test('repeating one Web turn/start id reuses the in-flight official result', asy
   const send=clientUserMessageId=>fetch(url+'/api/rpc',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'turn/start',params:{threadId:'thread-1',input:[{type:'text',text:'dedupe',text_elements:[]}],clientUserMessageId}})});
   const [first,second]=await Promise.all([send('web-dedupe-1'),send('web-dedupe-1')]);assert.equal(first.status,200,logs);assert.equal(second.status,200,logs);const a=await first.json(),b=await second.json();assert.equal(a.result.count,1);assert.equal(b.result.count,1);assert.equal(a.result.turn.id,b.result.turn.id);
   const third=await send('web-dedupe-2');assert.equal(third.status,200,logs);assert.equal((await third.json()).result.count,2);
+  child.kill('SIGTERM');await new Promise(resolve=>child.once('exit',resolve));
+});
+
+test('a fresh SSE connection receives the latest active official plan snapshot', async(t)=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cweb-plan-replay-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const codex=fakePlanReplayCodex(dir),port=await getFreePort(),url=`http://127.0.0.1:${port}`,token='plan-replay-test-token';let logs='';
+  const child=spawn(process.execPath,['src/server.mjs'],{cwd:root,env:{...process.env,CWEB_CODEX_BIN:codex,CWEB_STATE_DIR:path.join(dir,'state'),CWEB_WORKSPACE:dir,CWEB_HOST:'127.0.0.1',CWEB_PORT:String(port),CWEB_REQUIRE_AUTH:'1',CWEB_TOKEN:token,CWEB_MCP_APPS:'0'},stdio:['ignore','pipe','pipe']});
+  child.stdout.on('data',x=>logs+=x);child.stderr.on('data',x=>logs+=x);t.after(()=>{if(child.exitCode===null)child.kill('SIGTERM')});await waitReady(url,child);
+  const origin=url,login=await fetch(url+'/api/login',{method:'POST',headers:{'content-type':'application/json',origin},body:JSON.stringify({token})});assert.equal(login.status,200,logs);const cookie=login.headers.get('set-cookie').split(';',1)[0];
+  const methods=await (await fetch(url+'/api/methods',{headers:{cookie}})).json();assert.deepEqual(methods.serverNotifications.map(item=>item.method),['turn/plan/updated'],logs);
+  const firstResponse=await fetch(url+'/api/events',{headers:{cookie}}),first=sseReader(firstResponse),connected=await sseNextWithTimeout(first),notification=await sseNextWithTimeout(first);
+  assert.equal(firstResponse.status,200,logs);assert.equal(connected.type,'connected',`${JSON.stringify(connected)}\n${logs}`);assert.equal(notification.type,'notification',`${JSON.stringify(notification)}\n${logs}`);assert.equal(notification.payload.method,'turn/plan/updated');assert.equal(notification.payload.params.plan[0].status,'inProgress');await first.cancel();
+  const secondResponse=await fetch(url+'/api/events',{headers:{cookie}}),second=sseReader(secondResponse),replayed=await sseNextWithTimeout(second);
+  assert.equal(secondResponse.status,200,logs);assert.equal(replayed.type,'connected',`${JSON.stringify(replayed)}\n${logs}`);assert.equal(replayed.payload.activePlans.length,1,`${JSON.stringify(replayed)}\n${logs}`);assert.equal(replayed.payload.activePlans[0].method,'turn/plan/updated');assert.equal(replayed.payload.activePlans[0].params.turnId,'turn-1');assert.equal(replayed.payload.activePlans[0].params.plan[0].status,'inProgress');await second.cancel();
   child.kill('SIGTERM');await new Promise(resolve=>child.once('exit',resolve));
 });
 
