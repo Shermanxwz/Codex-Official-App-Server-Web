@@ -63,6 +63,7 @@ process.exit(2);
 `,{mode:0o755}); return file;
 }
 async function waitReady(url, child){let logs='';child.stderr?.on('data',x=>logs+=x);child.stdout?.on('data',x=>logs+=x);for(let i=0;i<80;i++){if(child.exitCode!==null)throw new Error(`server exited ${child.exitCode}\n${logs}`);try{const r=await fetch(`${url}/readyz`);if(r.status===200)return;}catch{}await new Promise(r=>setTimeout(r,50));}throw new Error(`server/app-server did not become ready\n${logs}`);}
+function sseReader(response){const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';return{async next(){for(;;){const boundary=buffer.indexOf('\n\n');if(boundary>=0){const frame=buffer.slice(0,boundary);buffer=buffer.slice(boundary+2);const data=frame.split('\n').filter(line=>line.startsWith('data:')).map(line=>line.slice(5).trimStart()).join('\n');if(data)return JSON.parse(data);continue}const chunk=await reader.read();if(chunk.done)return null;buffer+=decoder.decode(chunk.value,{stream:true})}},cancel(){return reader.cancel()}}}
 
 test('full HTTP gateway admits only methods exported by official schema', async(t)=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cweb-http-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
@@ -92,6 +93,20 @@ test('full HTTP gateway admits only methods exported by official schema', async(
   assert.equal(exited.code,0,logs);
 });
 
+test('multiple SSE clients stay independent when one client disconnects', async(t)=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cweb-sse-multi-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const codex=fakeCodex(dir),port=await getFreePort(),url=`http://127.0.0.1:${port}`,token='sse-multi-test-token';let logs='';
+  const child=spawn(process.execPath,['src/server.mjs'],{cwd:root,env:{...process.env,CWEB_CODEX_BIN:codex,CWEB_STATE_DIR:path.join(dir,'state'),CWEB_WORKSPACE:dir,CWEB_HOST:'127.0.0.1',CWEB_PORT:String(port),CWEB_REQUIRE_AUTH:'1',CWEB_TOKEN:token,CWEB_MCP_APPS:'0'},stdio:['ignore','pipe','pipe']});
+  child.stdout.on('data',x=>logs+=x);child.stderr.on('data',x=>logs+=x);t.after(()=>{if(child.exitCode===null)child.kill('SIGTERM')});await waitReady(url,child);
+  const origin=url,login=await fetch(`${url}/api/login`,{method:'POST',headers:{'content-type':'application/json',origin},body:JSON.stringify({token})});assert.equal(login.status,200,logs);const cookie=login.headers.get('set-cookie').split(';',1)[0];
+  const firstResponse=await fetch(`${url}/api/events`,{headers:{cookie}}),secondResponse=await fetch(`${url}/api/events`,{headers:{cookie}});assert.equal(firstResponse.status,200);assert.equal(secondResponse.status,200);
+  const first=sseReader(firstResponse),second=sseReader(secondResponse);t.after(()=>Promise.allSettled([first.cancel(),second.cancel()]));
+  assert.equal((await first.next()).type,'connected');assert.equal((await second.next()).type,'connected');await first.cancel();
+  const changed=await fetch(`${url}/api/control`,{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({desktopWriteProtection:false})});assert.equal(changed.status,200,logs);
+  const changedBody=await changed.json();assert.equal(changedBody.control.webWriteEnabled,true);assert.equal(Object.hasOwn(changedBody.control,'desktopWriteProtection'),false);
+  const event=await second.next();assert.equal(event.type,'controlChanged');assert.equal(event.payload.control.webWriteEnabled,true);assert.equal(Object.hasOwn(event.payload.control,'desktopWriteProtection'),false);
+});
+
 test('active-writer resume is a read-only conflict, never an HTTP 502', async(t)=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cweb-active-writer-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   const codex=fakeActiveWriterCodex(dir); const port=await getFreePort(); const url=`http://127.0.0.1:${port}`; const token='active-writer-test-token'; let logs='';
@@ -112,12 +127,12 @@ test('Web write control blocks mutations while preserving official reads', async
   const child=spawn(process.execPath,['src/server.mjs'],{cwd:root,env:{...process.env,CWEB_CODEX_BIN:codex,CWEB_STATE_DIR:path.join(dir,'state'),CWEB_WORKSPACE:dir,CWEB_HOST:'127.0.0.1',CWEB_PORT:String(port),CWEB_REQUIRE_AUTH:'1',CWEB_TOKEN:token,CWEB_MCP_APPS:'0'},stdio:['ignore','pipe','pipe']});
   child.stdout.on('data',x=>logs+=x); child.stderr.on('data',x=>logs+=x); t.after(()=>{if(child.exitCode===null)child.kill('SIGTERM')});
   await waitReady(url,child); const origin=url; const login=await fetch(url+'/api/login',{method:'POST',headers:{'content-type':'application/json',origin},body:JSON.stringify({token})}); assert.equal(login.status,200,logs); const cookie=login.headers.get('set-cookie').split(';',1)[0];
-  const initial=await (await fetch(url+'/api/control',{headers:{cookie}})).json(); assert.equal(initial.control.webWriteEnabled,true); assert.equal(initial.control.desktopWriteProtection,true);
+  const initial=await (await fetch(url+'/api/control',{headers:{cookie}})).json(); assert.equal(initial.control.webWriteEnabled,true); assert.equal(Object.hasOwn(initial.control,'desktopWriteProtection'),false);
   const off=await fetch(url+'/api/control',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({webWriteEnabled:false})}); assert.equal(off.status,200,logs); assert.equal((await off.json()).control.webWriteEnabled,false);
   const read=await fetch(url+'/api/rpc',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'thread/read',params:{threadId:'thread-1',includeTurns:false}})}); assert.equal(read.status,200,logs);
   const methods=await (await fetch(url+'/api/methods',{headers:{cookie}})).json(); assert.equal(methods.requests.find(item=>item.method==='thread/read').allowed,true); assert.equal(methods.requests.find(item=>item.method==='thread/resume').allowed,false);
   const blocked=await fetch(url+'/api/rpc',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'thread/resume',params:{threadId:'thread-1'}})}); assert.equal(blocked.status,403,logs); assert.equal((await blocked.json()).error,'WEB_WRITE_DISABLED');
   const on=await fetch(url+'/api/control',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({webWriteEnabled:true})}); assert.equal(on.status,200,logs);
   const conflict=await fetch(url+'/api/rpc',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'thread/resume',params:{threadId:'thread-1'}})}); assert.equal(conflict.status,409,logs); assert.equal((await conflict.json()).error,'THREAD_READ_ONLY');
-  assert.equal(JSON.parse(fs.readFileSync(path.join(dir,'state','control.json'),'utf8')).webWriteEnabled,true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir,'state','control.json'),'utf8')),{webWriteEnabled:true});
 });

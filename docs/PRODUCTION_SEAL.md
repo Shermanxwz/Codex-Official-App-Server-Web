@@ -7,7 +7,7 @@
 - state-changing API requests require same-origin validation;
 - the Linux archive deployment runs the official App Server as a separate supervised WebSocket service; the Web gateway may also use the portable owned stdio child mode;
 - the official service binds only to loopback, and receives no Web session token or other `CWEB_*` setting;
-- RPCs, server requests, stdin, JSONL lines, HTTP bodies, SSE clients/events, sessions and rate-limit keys are bounded;
+- RPCs, server requests, stdin, JSONL lines, HTTP bodies, SSE clients/events/queues, sessions and rate-limit keys are bounded; each SSE client has an independent keep-alive and backpressure boundary;
 - crashes clear stale ServerRequests and restart with bounded exponential delay;
 - shutdown terminates only owned children.
 

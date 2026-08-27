@@ -45,13 +45,13 @@ Host 页面
 
 ## Web 产品能力
 
-原生界面包括历史/read/resume、官方 `thread/turns/list` 分页与懒加载、侧边栏“历史完整会话”模式、完整历史关键词筛选、实时 Turn/Item、流式 delta、模型与 reasoning、官方 Turn 处理时长、interrupt、命令/文件/权限审批、用户输入、MCP elicitation、断线权威重同步，以及 MCP App 渲染。执行项会像 Codex 一样收进默认折叠的“工作过程”，主回答保持在对话主线上；官方返回非空计划时，计划卡固定在输入框上方，桌面端悬停/聚焦查看步骤，触屏端点击展开；活动 Turn 中继续输入会走官方 `turn/steer` 调整方向，手动上下文整理走官方 `thread/compact/start`，并显示压缩动画。运行中标题、停止按钮、调整方向和上下文仪表均由真实官方 Turn/usage 事件驱动，空闲时不伪造运行状态。其余不常用官方方法仍可在 **官方接口** Drawer 中按当前官方 schema 直接调用。
+原生界面包括历史/read/resume、官方 `thread/turns/list` 摘要分页、按 Turn 通过 `thread/items/list` 懒加载完整项、侧边栏“历史完整会话”模式、完整历史关键词筛选、实时 Turn/Item、流式 delta、模型与 reasoning、官方 Turn 处理时长、interrupt、命令/文件/权限审批、用户输入、MCP elicitation、断线权威重同步，以及 MCP App 渲染。执行项会像 Codex 一样收进默认折叠的“工作过程”，主回答保持在对话主线上；官方返回非空计划时，计划卡固定在输入框上方，桌面端悬停/聚焦查看步骤，触屏端点击展开；活动 Turn 中继续输入会走官方 `turn/steer` 调整方向，手动上下文整理走官方 `thread/compact/start`，并显示压缩动画。运行中标题和运行指示跟随官方 Turn/线程活动事件，包括不携带 `turnId` 的官方线程级 active 状态；停止、调整方向、上下文用量和网页写入权限仍只属于持有本地 Turn 标记的网页标签。即使只丢失 `turn/completed`，网页也会用有界的官方只读核对清除本地运行状态，空闲时不伪造运行状态。其余不常用官方方法仍可在 **官方接口** Drawer 中按当前官方 schema 直接调用。
 
-共享历史遵循单写入者边界：选择会话和重连恢复只使用官方 `thread/read` 与分页读取，不自动 `thread/resume`；只有明确发送或管理操作时才尝试写入。若桌面官方客户端正在占用会话，网页保持只读，任务结束后通过官方状态探测恢复。侧栏提供默认开启的“网页写入”和“桌面占用保护”开关；后者只控制网页安全协调，官方协议不提供直接撤销桌面 ChatGPT 写入权限的接口。会话菜单使用官方 `thread/name/set`、`thread/archive`、`thread/unarchive`、`thread/delete`，不直接改历史文件。
+共享历史遵循单写入者边界：选择会话和重连恢复只使用官方 `thread/read` 与分页读取，不自动 `thread/resume`；只有明确发送或管理操作时才尝试写入。网页不再额外增加“桌面占用保护”闸门：官方活动只负责真实显示运行状态，只有官方实际返回 active-writer 冲突时，网页才临时进入只读并在任务结束后恢复。侧栏只保留默认开启的“网页写入”开关，并由官方 App Server 决定并发写入是否被接受。会话菜单使用官方 `thread/name/set`、`thread/archive`、`thread/unarchive`、`thread/delete`，不直接改历史文件。
 
-当前固定的 Codex 官方协议提供 `thread/turns/list`、`thread/items/list` 分页和 `thread/searchOccurrences` 官方全文检索。快速会话固定只显示最近 12 条 Turn：底层仍使用官方分页来限制启动读取，但不提供“加载更早会话”控件；需要更早内容时进入“历史完整会话”。完整历史模式按页运行：先立即显示最近一页，历史控件吸附在顶部，只有用户明确加载更早内容或搜索命中更早会话段时才继续读取对应分页。搜索以官方 occurrence 索引为主，并补充已经渲染的工作过程文本，不伪造 ChatGPT 私有接口。每一页单独请求，遇到大页还会自动降为更小分页重试，整段会话不会被拼成一条 128 MiB JSONL。分页消除了“整段会话启动读取”的聚合阈值；但单个异常巨大的官方 Turn 仍可能触发传输安全闸门，需要先由官方压缩上下文。
+当前固定的 Codex 官方协议提供 `thread/turns/list`、`thread/items/list` 分页和 `thread/searchOccurrences` 官方全文检索。快速会话固定只显示最近 10 条 Turn：底层使用官方 `itemsView: summary` 分页来限制启动读取，不提供“加载更早会话”控件；需要更早内容时进入“历史完整会话”。完整历史模式按页运行：先立即显示最近一页摘要，历史控件和页码标识吸附在顶部，只有用户明确加载更早内容或搜索命中更早会话段时才继续读取对应 Turn 分页；工作过程通过官方 `thread/items/list` 按 Turn 懒加载，只在接近可视区或明确点击“加载完整项”时读取。搜索以官方 occurrence 索引为主，并补充已经渲染的工作过程文本，不伪造 ChatGPT 私有接口。每一页单独请求，遇到大页还会自动降为更小分页重试，整段会话不会被拼成一条 128 MiB JSONL。分页消除了“整段会话启动读取”的聚合阈值；但单个异常巨大的官方 Turn 仍可能触发传输安全闸门，需要先由官方压缩上下文。
 
-每次网关启动都会生成运行代际标识，并同时通过 `/api/meta`、SSE `connected` 帧提供。浏览器在 SSE 断线重连、页面重新获得焦点或检测到代际变化时，只用官方权威历史重新读取页面，不会因为恢复页面而抢占桌面会话；`thread/resume` 仅在明确的网页写入动作中调用。若官方返回 active-writer 冲突，网关返回明确的只读状态，网页不会把它伪装成 502。Linux 安装器把官方 App Server 放在独立的 `codex-official-app-server.service` 中，网关重启不会终止官方 Turn；断线期间没有缓存的增量不会被伪造重放。若官方 App Server 自身被停止、崩溃或机器关机，操作系统仍会终止正在生成的 Turn；官方协议没有把已被终止的模型生成凭空续跑的接口。
+每次网关启动都会生成运行代际标识，并同时通过 `/api/meta`、SSE `connected` 帧提供。浏览器在 SSE 断线重连、页面重新获得焦点或检测到代际变化时，只用官方权威历史重新读取页面，不会因为恢复页面而尝试抢占会话；`thread/resume` 仅在明确的网页写入动作中调用。若官方返回 active-writer 冲突，网关返回明确的只读状态，网页不会把它伪装成 502。Linux 安装器把官方 App Server 放在独立的 `codex-official-app-server.service` 中，网关重启不会终止官方 Turn；断线期间没有缓存的增量不会被伪造重放。若官方 App Server 自身被停止、崩溃或机器关机，操作系统仍会终止正在生成的 Turn；官方协议没有把已被终止的模型生成凭空续跑的接口。
 
 `CWEB_CODEX_TRANSPORT=websocket` 与 `CWEB_CODEX_SERVER_URL` 控制持久官方传输。WebSocket 端点只接受 loopback `ws(s)` 地址，官方服务单元不接收 Web 会话令牌或其他 `CWEB_*` 配置。`npm start` 未安装独立服务时仍默认为 stdio；要获得重启后继续接管的行为，应使用 `scripts/install-linux.sh` 安装的双服务部署。
 

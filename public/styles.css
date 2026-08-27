@@ -316,11 +316,25 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
 .history-older-control:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .history-older-control.loading{cursor:wait}
 .history-older-control.loading::before{content:'';width:11px;height:11px;margin-right:7px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:history-loading-spin .8s linear infinite}
+.history-page-marker{position:sticky;top:0;z-index:5;width:fit-content;max-width:100%;margin:0 auto 8px;padding:4px 10px;border:1px solid color-mix(in srgb,var(--line) 78%,transparent);border-radius:999px;background:color-mix(in srgb,var(--bg) 94%,var(--soft));backdrop-filter:blur(12px);color:var(--muted);font-size:9px;line-height:1.4;text-align:center}
+.history-page-marker.with-search{top:46px}
+.history-older-control.with-page-marker{top:34px}
+.history-older-control.with-search.with-page-marker{top:80px}
+.history-items-placeholder{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0 0;padding:7px 10px;border:1px dashed var(--line);border-radius:8px;color:var(--muted);font-size:10px}
+.history-items-load{flex:0 0 auto;border:1px solid var(--line);border-radius:999px;padding:4px 9px;background:transparent;color:var(--text);font:inherit;cursor:pointer}
+.history-items-load:hover:not(:disabled){border-color:var(--strong);background:var(--soft)}
+.history-items-load:disabled{cursor:wait;opacity:.7}
+.history-items-loading{opacity:.82}
 @media(max-width:760px){
   .turn-header-detail{display:inline;font-size:9px}
   .history-mode-button{min-height:38px}
   .history-older-control{width:calc(100% - 8px);margin-bottom:12px;font-size:11px}
   .history-older-control.with-search{top:68px}
+  .history-older-control.with-page-marker{top:48px}
+  .history-older-control.with-search.with-page-marker{top:102px}
+  .history-page-marker.with-search{top:68px}
+  .history-items-placeholder{align-items:flex-start;flex-direction:column}
+  .history-items-load{width:100%}
 }
 
 /* Full-history search is backed by the official occurrence index (with a

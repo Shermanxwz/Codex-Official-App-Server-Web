@@ -24,13 +24,12 @@ fs.mkdirSync(config.stateDir, { recursive: true, mode: 0o700 });
 const stateMaintenance = pruneStateArtifacts(config.stateDir);
 if (stateMaintenance.removed.length) console.log(`Removed ${stateMaintenance.removed.length} stale schema swap artifact(s)`);
 
-const DEFAULT_CONTROL_STATE = { webWriteEnabled: true, desktopWriteProtection: true };
+const DEFAULT_CONTROL_STATE = { webWriteEnabled: true };
 function loadControlState() {
   try {
     const value = JSON.parse(fs.readFileSync(controlFile, 'utf8'));
     return {
       webWriteEnabled: value?.webWriteEnabled !== false,
-      desktopWriteProtection: value?.desktopWriteProtection !== false,
     };
   } catch {
     return { ...DEFAULT_CONTROL_STATE };
@@ -41,13 +40,11 @@ function controlSnapshot() {
   return {
     ...controlState,
     effectiveWebWriteEnabled: controlState.webWriteEnabled && config.accessProfile !== 'read',
-    desktopWriteControlSupported: false,
   };
 }
 function saveControlState(next) {
   controlState = {
     webWriteEnabled: next?.webWriteEnabled !== false,
-    desktopWriteProtection: next?.desktopWriteProtection !== false,
   };
   const temporary = `${controlFile}.tmp-${process.pid}`;
   fs.writeFileSync(temporary, `${JSON.stringify(controlState)}\n`, { mode: 0o600 });
@@ -147,7 +144,9 @@ const codex = new CodexAppServer({
 // revocation until the cookie expires.
 const sessions = new SessionStore(12 * 60 * 60 * 1000, 256, config.token);
 const loginRate = new SlidingRateLimit(6, 60_000);
-const sseClients = new Set();
+// Each browser gets an independent bounded queue. A slow mobile connection
+// must never make another Web tab lose its event stream.
+const sseClients = new Map();
 let fatalCodexError = null;
 let restartTimer = null;
 let restartAttempt = 0;
@@ -214,17 +213,74 @@ function eventFrame(type, payload) {
   return { event: compact, frame: `id: ${compact.sequence}\ndata: ${JSON.stringify(compact)}\n\n` };
 }
 
-function writeSse(res, frame) {
-  if (res.destroyed || res.writableEnded || res.writableLength > config.sseMaxBufferBytes) {
-    sseClients.delete(res); res.destroy(); return false;
+function removeSseClient(res, { destroy = false } = {}) {
+  const client = sseClients.get(res);
+  if (client?.drainListener) {
+    try { res.off('drain', client.drainListener); } catch { /* response may already be closed */ }
+    client.drainListener = null;
   }
-  try { res.write(frame); return true; }
-  catch { sseClients.delete(res); res.destroy(); return false; }
+  sseClients.delete(res);
+  if (destroy && !res.destroyed) {
+    try { res.destroy(); } catch { /* already closed */ }
+  }
+}
+
+function failSseClient(res) {
+  removeSseClient(res, { destroy: true });
+  return false;
+}
+
+function resumeSseClient(client) {
+  if (!sseClients.has(client.res)) return;
+  client.drainListener = null;
+  client.blocked = false;
+  while (client.queue.length) {
+    const frame = client.queue.shift();
+    client.queuedBytes = Math.max(0, client.queuedBytes - Buffer.byteLength(frame));
+    try {
+      if (!client.res.write(frame)) {
+        client.blocked = true;
+        client.drainListener = () => resumeSseClient(client);
+        client.res.once('drain', client.drainListener);
+        return;
+      }
+    } catch {
+      failSseClient(client.res);
+      return;
+    }
+  }
+}
+
+function writeSse(res, frame) {
+  const client = sseClients.get(res);
+  if (!client || res.destroyed || res.writableEnded) return failSseClient(res);
+  const bytes = Buffer.byteLength(frame);
+  if (client.blocked || res.writableNeedDrain || res.writableLength > config.sseMaxBufferBytes) {
+    if (client.queuedBytes + bytes > config.sseMaxBufferBytes) return failSseClient(res);
+    client.queue.push(frame);
+    client.queuedBytes += bytes;
+    if (!client.drainListener) {
+      client.blocked = true;
+      client.drainListener = () => resumeSseClient(client);
+      res.once('drain', client.drainListener);
+    }
+    return true;
+  }
+  try {
+    if (!res.write(frame)) {
+      client.blocked = true;
+      client.drainListener = () => resumeSseClient(client);
+      res.once('drain', client.drainListener);
+    }
+    return true;
+  } catch {
+    return failSseClient(res);
+  }
 }
 
 function pushEvent(type, payload) {
   const { frame } = eventFrame(type, payload);
-  for (const res of [...sseClients]) writeSse(res, frame);
+  for (const res of [...sseClients.keys()]) writeSse(res, frame);
 }
 
 function rejectUnknownServerRequest(message) {
@@ -349,7 +405,7 @@ function serveStatic(req, res, pathname) {
   try { stat = fs.statSync(target); } catch { return false; }
   if (!stat.isFile()) return false;
   const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json; charset=utf-8' };
-  res.writeHead(200, secureHeaders({ 'Content-Type': types[path.extname(target)] || 'application/octet-stream', 'Content-Length': stat.size, 'Cache-Control': 'no-cache' }));
+  res.writeHead(200, secureHeaders({ 'Content-Type': types[path.extname(target)] || 'application/octet-stream', 'Content-Length': stat.size, 'Cache-Control': 'no-store' }));
   fs.createReadStream(target).pipe(res);
   return true;
 }
@@ -392,7 +448,6 @@ async function api(req, res, url) {
     const body = await readJson(req, 64 * 1024);
     const next = { ...controlState };
     if (typeof body.webWriteEnabled === 'boolean') next.webWriteEnabled = body.webWriteEnabled;
-    if (typeof body.desktopWriteProtection === 'boolean') next.desktopWriteProtection = body.desktopWriteProtection;
     const control = saveControlState(next);
     pushEvent('controlChanged', { control });
     return json(res, 200, { control });
@@ -422,7 +477,7 @@ async function api(req, res, url) {
         nativeItemTimeline: true, exactProtocolDispositionSeal: true, openaiFormNative: true,
         mcpAppsAdvertised: config.mcpAppsEnabled, mcpAppsDoubleIframeSandbox: true,
         dynamicToolsExperimentalOnly: true,
-        singleWriterReadBoundary: true, webWriteControl: true, desktopWriteControlSupported: false,
+        singleWriterReadBoundary: true, webWriteControl: true,
       },
     });
   }
@@ -439,10 +494,15 @@ async function api(req, res, url) {
   if (pathname === '/api/events' && req.method === 'GET') {
     res.writeHead(200, secureHeaders({ 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' }));
     try { res.socket?.setNoDelay?.(true); } catch { /* ignore */ }
+    const client = { res, queue: [], queuedBytes: 0, blocked: false, drainListener: null };
+    sseClients.set(res, client);
     const connected = eventFrame('connected', { pendingServerRequests: codex.pendingServerRequests().filter((item) => !MACHINE_ONLY_SERVER_REQUESTS.has(item.method)), codexReady: codex.isReady(), eventSequence, runtimeBootId, runtimeStartedAt });
-    writeSse(res, connected.frame); sseClients.add(res);
+    writeSse(res, connected.frame);
     const heartbeat = setInterval(() => { if (!writeSse(res, `: ping ${Date.now()}\n\n`)) clearInterval(heartbeat); }, 15_000);
-    req.on('close', () => { clearInterval(heartbeat); sseClients.delete(res); });
+    heartbeat.unref?.();
+    const cleanup = () => { clearInterval(heartbeat); removeSseClient(res); };
+    res.once('close', cleanup);
+    req.once('aborted', cleanup);
     return;
   }
   if (pathname === '/api/rpc' && req.method === 'POST') {
@@ -558,8 +618,8 @@ function shutdown(signal) {
   console.log(`Shutting down (${signal})`);
   if (restartTimer) clearTimeout(restartTimer);
   pushEvent('webRestarting', { reason: 'service-shutdown', runtimeBootId });
-  for (const res of [...sseClients]) {
-    sseClients.delete(res);
+  for (const res of [...sseClients.keys()]) {
+    removeSseClient(res);
     try { res.end(); } catch { try { res.destroy(); } catch { /* ignore */ } }
   }
   dynamicToolHost.close();
