@@ -28,7 +28,7 @@
 
 ## History invariants
 
-- quick view always requests a fresh official recent `itemsView: notLoaded` page on an explicit thread selection, visibly labels the bounded recent window, and never exposes an older-page control; visible Turn content is hydrated separately;
+- quick view always requests a fresh official recent `itemsView: notLoaded` page on an explicit thread selection, visibly labels the bounded recent window, never exposes an older-page control, and automatically hydrates every one of those ten Turns through official `thread/items/list` calls with bounded concurrency;
 - full-history mode is the only path that follows official cursors beyond the recent page; its conversation and work-process items remain per-Turn lazy reads, so selecting a thread does not aggregate the entire conversation or attachment payloads into one response;
 - superseded history reads cannot overwrite a newer selection or its page cursor.
 
