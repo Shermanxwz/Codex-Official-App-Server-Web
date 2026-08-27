@@ -175,7 +175,10 @@ function turnStartDedupeKey(method, params) {
   const threadId = String(params?.threadId || '');
   const clientUserMessageId = String(params?.clientUserMessageId || '');
   if (!threadId || !clientUserMessageId || clientUserMessageId.length > 256) return '';
-  return JSON.stringify([threadId, clientUserMessageId]);
+  // `turn/start` and `turn/steer` use the same official client id field, but
+  // are different operations. Never let a retry of one operation reuse the
+  // in-flight promise of the other operation.
+  return JSON.stringify([method, threadId, clientUserMessageId]);
 }
 
 function pruneTurnStartDedupe(now = Date.now()) {
@@ -183,9 +186,9 @@ function pruneTurnStartDedupe(now = Date.now()) {
   while (turnStartDedupe.size > TURN_START_DEDUPE_MAX) turnStartDedupe.delete(turnStartDedupe.keys().next().value);
 }
 
-async function requestOfficial(method, params) {
+async function requestOfficial(method, params, signal = null) {
   const key = turnStartDedupeKey(method, params);
-  if (!key) return codex.request(method, params);
+  if (!key) return codex.request(method, params, config.rpcTimeoutMs, signal);
   const now = Date.now();
   pruneTurnStartDedupe(now);
   const existing = turnStartDedupe.get(key);
@@ -194,7 +197,10 @@ async function requestOfficial(method, params) {
     turnStartDedupe.set(key, existing);
     return existing.promise;
   }
-  const entry = { expiresAt: now + TURN_START_DEDUPE_TTL_MS, promise: codex.request(method, params) };
+  // A browser disconnect must not cancel a turn request after the official
+  // runtime may already have accepted it; the client-side message id and this
+  // cache are the duplicate-submission boundary for turn/start and turn/steer.
+  const entry = { expiresAt: now + TURN_START_DEDUPE_TTL_MS, promise: codex.request(method, params, config.rpcTimeoutMs) };
   turnStartDedupe.set(key, entry);
   pruneTurnStartDedupe(now);
   try { return await entry.promise; }
@@ -503,6 +509,18 @@ function requireOrigin(req, res) { if (sameOrigin(req, config.publicOrigin)) ret
 function clientAddress(req) { return req.socket.remoteAddress || 'unknown'; }
 function methodSummary(item) { return { method: item.method, title: item.title, description: item.description, paramsRef: item.paramsRef, managed: item.method === 'initialize' || item.method === 'initialized', risk: methodRisk(item.method), allowed: methodAllowed(item.method) }; }
 
+function requestDisconnectSignal(req, res) {
+  const controller = new AbortController();
+  const abort = () => { if (!res.writableEnded) controller.abort(); };
+  req.once('aborted', abort);
+  res.once('close', abort);
+  if (req.aborted || res.destroyed) controller.abort();
+  return {
+    signal: controller.signal,
+    cleanup: () => { req.off('aborted', abort); res.off('close', abort); },
+  };
+}
+
 function serveStatic(req, res, pathname) {
   const relative = pathname === '/' ? 'index.html' : pathname.slice(1);
   if (!relative || relative.includes('\0')) return false;
@@ -517,8 +535,40 @@ function serveStatic(req, res, pathname) {
   return true;
 }
 
+function jsonObjectParams(method, params) {
+  if (params === undefined || params === null) return {};
+  if (typeof params !== 'object' || Array.isArray(params)) {
+    const error = new Error(`Official ${method} params must be a JSON object`);
+    error.status = 400;
+    error.code = 'INVALID_PARAMS_OBJECT';
+    throw error;
+  }
+  return { ...params };
+}
+
+function jsonObjectBody(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    const error = new Error('JSON request body must be an object');
+    error.status = 400;
+    error.code = 'INVALID_JSON_OBJECT';
+    throw error;
+  }
+  return body;
+}
+
+function methodEnvelope(body) {
+  const value = jsonObjectBody(body);
+  if (typeof value.method !== 'string' || !value.method.trim() || value.method.length > 256) {
+    const error = new Error('JSON-RPC method must be a non-empty string of at most 256 characters');
+    error.status = 400;
+    error.code = 'INVALID_METHOD';
+    throw error;
+  }
+  return value;
+}
+
 function managedParams(method, params) {
-  const value = params && typeof params === 'object' && !Array.isArray(params) ? { ...params } : {};
+  const value = jsonObjectParams(method, params);
   if (method === 'thread/start' && dynamicToolHost.size) {
     if (value.dynamicTools !== undefined) {
       const error = new Error('thread/start.dynamicTools is managed by CWEB_DYNAMIC_TOOLS_FILE on this gateway');
@@ -534,7 +584,7 @@ async function api(req, res, url) {
   if (pathname === '/api/login' && req.method === 'POST') {
     if (!requireOrigin(req, res)) return;
     if (!loginRate.allow(clientAddress(req))) return json(res, 429, { error: 'RATE_LIMITED' });
-    const body = await readJson(req, 64 * 1024);
+    const body = jsonObjectBody(await readJson(req, 64 * 1024));
     if (!config.requireAuth || !safeEqualText(body.token || '', config.token)) return json(res, 401, { error: 'INVALID_TOKEN' });
     const session = sessions.create();
     const secure = config.publicOrigin.startsWith('https://') ? '; Secure' : '';
@@ -552,7 +602,7 @@ async function api(req, res, url) {
   if (pathname === '/api/control' && req.method === 'GET') return json(res, 200, { control: controlSnapshot() });
   if (pathname === '/api/control' && req.method === 'POST') {
     if (!requireOrigin(req, res)) return;
-    const body = await readJson(req, 64 * 1024);
+    const body = jsonObjectBody(await readJson(req, 64 * 1024));
     const next = { ...controlState };
     if (typeof body.webWriteEnabled === 'boolean') next.webWriteEnabled = body.webWriteEnabled;
     const control = saveControlState(next);
@@ -605,7 +655,14 @@ async function api(req, res, url) {
     sseClients.set(res, client);
     const connected = eventFrame('connected', { pendingServerRequests: codex.pendingServerRequests().filter((item) => !MACHINE_ONLY_SERVER_REQUESTS.has(item.method)), activePlans: activeOfficialPlanNotifications(), codexReady: codex.isReady(), eventSequence, runtimeBootId, runtimeStartedAt });
     writeSse(res, connected.frame);
-    const heartbeat = setInterval(() => { if (!writeSse(res, `: ping ${Date.now()}\n\n`)) clearInterval(heartbeat); }, 15_000);
+    // Comments keep proxies alive but are invisible to EventSource.onmessage.
+    // Send a bounded gateway heartbeat as data as well, so every browser can
+    // detect a half-open SSE socket without turning transport bookkeeping into
+    // a human-facing conversation event.
+    const heartbeat = setInterval(() => {
+      const { frame } = eventFrame('heartbeat', { runtimeBootId });
+      if (!writeSse(res, frame)) clearInterval(heartbeat);
+    }, 15_000);
     heartbeat.unref?.();
     const cleanup = () => { clearInterval(heartbeat); removeSseClient(res); };
     res.once('close', cleanup);
@@ -614,7 +671,7 @@ async function api(req, res, url) {
   }
   if (pathname === '/api/rpc' && req.method === 'POST') {
     if (!requireOrigin(req, res)) return;
-    const body = await readJson(req, config.bodyLimit);
+    const body = methodEnvelope(await readJson(req, config.bodyLimit));
     const descriptor = registry.getRequest(body.method);
     if (!descriptor) return json(res, 400, { error: 'METHOD_NOT_IN_OFFICIAL_SCHEMA', method: body.method });
     if (body.method === 'initialize') return json(res, 400, { error: 'INITIALIZE_IS_MANAGED_BY_GATEWAY' });
@@ -623,7 +680,8 @@ async function api(req, res, url) {
       return json(res, 403, { error: 'METHOD_BLOCKED_BY_ACCESS_PROFILE', method: body.method, profile: config.accessProfile });
     }
     let result;
-    try { result = await requestOfficial(body.method, managedParams(body.method, body.params ?? {})); }
+    const disconnect = body.method === 'turn/start' || body.method === 'turn/steer' ? null : requestDisconnectSignal(req, res);
+    try { result = await requestOfficial(body.method, managedParams(body.method, body.params), disconnect?.signal); }
     catch (error) {
       // A thread owned by another official client is still perfectly readable.
       // Treat every active-writer collision as an explicit read-only conflict
@@ -637,30 +695,37 @@ async function api(req, res, url) {
       }
       error.requestMethod = body.method;
       throw error;
-    }
+    } finally { disconnect?.cleanup(); }
     return json(res, 200, { result });
   }
   if (pathname === '/api/notify' && req.method === 'POST') {
     if (!requireOrigin(req, res)) return;
-    const body = await readJson(req, config.bodyLimit);
+    const body = methodEnvelope(await readJson(req, config.bodyLimit));
     if (body.method === 'initialized') return json(res, 400, { error: 'INITIALIZED_IS_MANAGED_BY_GATEWAY' });
     if (!registry.getNotification(body.method)) return json(res, 400, { error: 'NOTIFICATION_NOT_IN_OFFICIAL_SCHEMA', method: body.method });
     if (!methodAllowed(body.method)) {
       if (!controlState.webWriteEnabled && methodRisk(body.method) !== 'read') return rejectWebWrite(res, body.method);
       return json(res, 403, { error: 'METHOD_BLOCKED_BY_ACCESS_PROFILE', method: body.method, profile: config.accessProfile });
     }
-    await codex.notify(body.method, body.params ?? {});
+    await codex.notify(body.method, jsonObjectParams(body.method, body.params));
     return json(res, 200, { ok: true });
   }
   if (pathname === '/api/respond' && req.method === 'POST') {
     if (!requireOrigin(req, res)) return;
-    const body = await readJson(req, config.bodyLimit);
+    const body = jsonObjectBody(await readJson(req, config.bodyLimit));
     const pending = codex.pendingServerRequests().find((item) => String(item.id) === String(body.id));
     if (!pending) return json(res, 404, { error: 'SERVER_REQUEST_NOT_PENDING' });
     if (!registry.getServerRequest(pending.method)) return json(res, 409, { error: 'SERVER_REQUEST_NOT_IN_OFFICIAL_SCHEMA' });
     if (MACHINE_ONLY_SERVER_REQUESTS.has(pending.method)) return json(res, 409, { error: 'PLATFORM_ONLY_SERVER_REQUEST', method: pending.method });
     if (!controlState.webWriteEnabled) return rejectWebWrite(res, `respond:${pending.method}`);
-    if (body.error) codex.respondError(body.id, body.error); else codex.respond(body.id, body.result ?? {});
+    if (Object.hasOwn(body, 'error')) {
+      if (!body.error || typeof body.error !== 'object' || Array.isArray(body.error)) return json(res, 400, { error: 'INVALID_RESPONSE_ERROR' });
+      codex.respondError(body.id, body.error);
+    } else {
+      // Preserve an intentional JSON null result. Omitting result remains a
+      // compatibility shorthand for an empty object used by older clients.
+      codex.respond(body.id, Object.hasOwn(body, 'result') ? body.result : {});
+    }
     return json(res, 200, { ok: true });
   }
   return json(res, 404, { error: 'NOT_FOUND' });
@@ -696,6 +761,7 @@ const server = http.createServer(async (req, res) => {
     if (serveStatic(req, res, url.pathname)) return;
     res.writeHead(404, secureHeaders({ 'Content-Type': 'text/plain; charset=utf-8' })); res.end('Not found');
   } catch (error) {
+    if (res.destroyed || res.writableEnded) return;
     const rpcError = compactRpcError(error);
     const publicMessage = rpcError?.message || String(error.message || '').replace(/\s+/g, ' ').slice(0, 1200);
     const requestContext = error.requestMethod ? ` method=${error.requestMethod}` : '';

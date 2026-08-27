@@ -69,6 +69,19 @@ test('pending RPC count is bounded before writes can grow without limit', async(
   await assert.rejects(first,/closed/i);
 });
 
+test('aborted read RPC releases its gateway slot without cancelling the official transport', async(t)=>{
+  const fake=fakeCodex(); t.after(()=>fs.rmSync(fake.dir,{recursive:true,force:true}));
+  const client=new CodexAppServer({codexBin:fake.file,cwd:fake.dir,timeoutMs:5000,maxPending:1}); t.after(()=>client.close());
+  await client.start();
+  const controller=new AbortController();
+  const pending=client.request('test/hang',{},5000,controller.signal);
+  await new Promise(resolve=>setImmediate(resolve));
+  controller.abort();
+  await assert.rejects(pending,error=>error.code==='CODEX_RPC_ABORTED'&&error.status===499);
+  const list=await client.request('thread/list',{});
+  assert.equal(list.data[0].id,'t1');
+});
+
 test('child stdin EPIPE is reported as transport failure instead of crashing the gateway client', async(t)=>{
   const fake=fakeCodex(); t.after(()=>fs.rmSync(fake.dir,{recursive:true,force:true}));
   const client=new CodexAppServer({codexBin:fake.file,cwd:fake.dir,timeoutMs:2000}); t.after(()=>client.close());

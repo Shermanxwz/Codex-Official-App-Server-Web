@@ -9,6 +9,7 @@
 - the official service binds only to loopback, and receives no Web session token or other `CWEB_*` setting;
 - RPCs, server requests, stdin, JSONL lines, HTTP bodies, SSE clients/events/queues, sessions and rate-limit keys are bounded; each SSE client has an independent keep-alive and backpressure boundary;
 - crashes clear stale ServerRequests and restart with bounded exponential delay;
+- disconnected/expired browser reads cancel their gateway-side pending RPC slot; uncertain `turn/start` and `turn/steer` requests remain deduplicated by the official client message id instead of being replayed;
 - shutdown terminates only owned children.
 
 ## Web delivery and live-state invariants
@@ -21,18 +22,22 @@
 - the gateway keeps only bounded, expiring active `turn/plan/updated` snapshots and includes them in every new SSE `connected` frame; terminal, idle, crash, and exit paths remove them;
 - a Web plan card is rendered only from an official plan snapshot and is cleared by an official terminal/empty-plan signal; it never advances by a local timer;
 - live Turn items are retained and merged into the terminal representation, so the completed work process is not discarded when a summary Turn is replaced;
+- terminal state is closed by the official event when available and by bounded official `thread/turns/list` reconciliation plus delayed authoritative reads when a terminal event or final item is missed;
+- the SSE stream emits a non-rendered data heartbeat in addition to the proxy keep-alive comment; the browser watchdog replaces a closed, errored, or half-open stream and then performs authoritative recovery;
 - delivery state, pending timers, and live-item caches are scoped to a thread and cleaned when that thread is cleared.
 
 ## History invariants
 
-- quick view always requests a fresh official recent summary page on an explicit thread selection, visibly labels the bounded recent window, and never exposes an older-page control;
-- full-history mode is the only path that follows official cursors beyond the recent page; its Turn work-process items remain per-Turn lazy reads, so selecting a thread does not aggregate the entire conversation into one response;
+- quick view always requests a fresh official recent `itemsView: notLoaded` page on an explicit thread selection, visibly labels the bounded recent window, and never exposes an older-page control; visible Turn content is hydrated separately;
+- full-history mode is the only path that follows official cursors beyond the recent page; its conversation and work-process items remain per-Turn lazy reads, so selecting a thread does not aggregate the entire conversation or attachment payloads into one response;
 - superseded history reads cannot overwrite a newer selection or its page cursor.
 
 ## Protocol invariants
 
 - official JSON and TypeScript exports are regenerated from the installed Codex binary;
 - invocation is gated by the official wire schema;
+- browser JSON envelopes and method parameters are object-shaped and method names are non-empty, bounded strings; server responses preserve valid JSON `null` results and reject malformed error objects;
+- the repository-wide official-interface audit proves every browser RPC/notification, server-request disposition and rendered ThreadItem belongs to the generated Stable/Experimental contract;
 - Stable and Experimental ServerRequest/ThreadItem dispositions are sealed separately;
 - MCP Apps is advertised only when required official MCP proxy methods are present;
 - configured Dynamic Tools require experimental mode and an official experimental `thread/start.dynamicTools` schema field.

@@ -24,7 +24,7 @@ Dynamic Tools are an official experimental App Server facility. A configured hos
 
 When Codex sends `item/tool/call`, a matching handler receives one JSON request on stdin and returns one JSON response on stdout. It is started with `shell:false`, a minimal environment, explicit inheritance only, no `CWEB_*` variables, bounded input/output/media, bounded concurrency and timeout, and bounded TERM→KILL cleanup on gateway shutdown. Tool/namespace identifiers and reserved namespaces follow the official Codex validator.
 
-Unconfigured `item/tool/call` requests are not fabricated as successful. They remain visible to the existing structured manual-response UI.
+An `item/tool/call` is answered only when an explicitly configured Dynamic Tool handler matches it. An unconfigured or unmatched call receives the official `-32601` JSON-RPC error and is not surfaced as a fake approval card; a configured-but-unregistered call also emits a bounded diagnostic event for the Web UI.
 
 ## Experimental external clock
 

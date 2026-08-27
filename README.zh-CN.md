@@ -11,7 +11,7 @@
 - **Stable ClientRequest / ClientNotification 全量覆盖：**`initialize` / `initialized` 由网关管理，其余官方导出方法全部经过 schema gate，可从原生 UI 或“官方接口”面板调用。
 - **ServerRequest 有明确宿主处置：**审批、用户输入、MCP elicitation、权限、Dynamic Tool，以及 experimental 外部时钟请求都进入明确 Host 流程；平台专属 token refresh / attestation 不进入浏览器信任边界。
 - **MCP Apps Host：**正式声明 `io.modelcontextprotocol/ui` + `text/html;profile=mcp-app`，实现稳定 `2026-01-26` Host 协议，并按规范使用 Web 必须的双 iframe sandbox。
-- **Dynamic Tool 自动 Host：**可选本机 process handler 通过官方 experimental `thread/start.dynamicTools` 自动注入；执行不经过 shell，并限制环境变量、超时、请求与输出大小。未配置的 Dynamic Tool 仍保留 Web 手动 fallback。
+- **Dynamic Tool 自动 Host：**可选本机 process handler 通过官方 experimental `thread/start.dynamicTools` 自动注入；执行不经过 shell，并限制环境变量、超时、请求与输出大小。未配置或未匹配的 Dynamic Tool 由官方协议返回 `-32601`，不会伪造审批 UI。
 - **Stable + Experimental 双协议封存：**CI 同时重新生成两套官方协议；Pinned 基线里只要新增 ThreadItem / ServerRequest 没有明确处置就直接失败。
 - **运行时 npm 依赖为 0。**要求 Node.js 22.12+。
 - **不接私有 ChatGPT backend，不抓 Codex 凭据，不直接修改 `auth.json` / `config.toml`，不安装/升级 Codex，不做 process-wide kill。**
@@ -51,7 +51,7 @@ Host 页面
 
 共享历史遵循单写入者边界：选择会话和重连恢复只使用官方 `thread/read` 与分页读取，不自动 `thread/resume`；只有明确发送或管理操作时才尝试写入。网页不再额外增加“桌面占用保护”闸门：官方活动只负责真实显示运行状态，只有官方实际返回 active-writer 冲突时，网页才临时进入只读并在任务结束后恢复。侧栏只保留默认开启的“网页写入”开关，并由官方 App Server 决定并发写入是否被接受。会话菜单使用官方 `thread/name/set`、`thread/archive`、`thread/unarchive`、`thread/delete`，不直接改历史文件。
 
-当前固定的 Codex 官方协议提供 `thread/turns/list`、`thread/items/list` 分页和 `thread/searchOccurrences` 官方全文检索。快速会话固定只显示最近 10 条 Turn：底层使用官方 `itemsView: summary` 分页来限制启动读取，不提供“加载更早会话”控件；需要更早内容时进入“历史完整会话”。完整历史模式按页运行：先立即显示最近一页摘要，历史控件和页码标识吸附在顶部，只有用户明确加载更早内容或搜索命中更早会话段时才继续读取对应 Turn 分页；工作过程通过官方 `thread/items/list` 按 Turn 懒加载，只在接近可视区或明确点击“加载完整项”时读取。搜索以官方 occurrence 索引为主，并补充已经渲染的工作过程文本，不伪造 ChatGPT 私有接口。每一页单独请求，遇到大页还会自动降为更小分页重试，整段会话不会被拼成一条 128 MiB JSONL。分页消除了“整段会话启动读取”的聚合阈值；但单个异常巨大的官方 Turn 仍可能触发传输安全闸门，需要先由官方压缩上下文。
+当前固定的 Codex 官方协议提供 `thread/turns/list`、`thread/items/list` 分页和 `thread/searchOccurrences` 官方全文检索。快速会话固定只显示最近 10 条 Turn：底层使用官方 `itemsView: notLoaded` 分页来限制启动读取，不提供“加载更早会话”控件；需要更早内容时进入“历史完整会话”。完整历史模式按页运行：先立即显示最近一页会话结构，历史控件和页码标识吸附在顶部，只有用户明确加载更早内容或搜索命中更早会话段时才继续读取对应 Turn 分页；可见的会话内容和工作过程通过官方 `thread/items/list` 按 Turn 懒加载，只在接近可视区或明确点击加载按钮时读取。搜索以官方 occurrence 索引为主，直接展示官方匹配摘要，并补充已经渲染的工作过程文本，不伪造 ChatGPT 私有接口。侧栏刷新、配置同步和搜索读取会合并/取消重复请求，避免挤占官方传输槽位。每一页单独请求，遇到大页还会自动降为更小分页重试，整段会话不会被拼成一条 128 MiB JSONL。分页消除了“整段会话启动读取”的聚合阈值；但单个异常巨大的官方 Turn 仍可能触发传输安全闸门，需要先由官方压缩上下文。
 
 每次网关启动都会生成运行代际标识，并同时通过 `/api/meta`、SSE `connected` 帧提供。浏览器在 SSE 断线重连、页面重新获得焦点或检测到代际变化时，只用官方权威历史重新读取页面，不会因为恢复页面而尝试抢占会话；`thread/resume` 仅在明确的网页写入动作中调用。若官方返回 active-writer 冲突，网关返回明确的只读状态，网页不会把它伪装成 502。Linux 安装器把官方 App Server 放在独立的 `codex-official-app-server.service` 中，网关重启不会终止官方 Turn；断线期间没有缓存的增量不会被伪造重放。若官方 App Server 自身被停止、崩溃或机器关机，操作系统仍会终止正在生成的 Turn；官方协议没有把已被终止的模型生成凭空续跑的接口。
 
@@ -117,11 +117,12 @@ npm ci --ignore-scripts
 npm run manifest:verify
 npm test
 npm run check
+npm run audit:official
 npm run seal:core
 npm run seal
 ```
 
-CI 包括：完整测试/静态检查、Pinned Stable 官方协议封存、Pinned Experimental 官方协议封存、Latest Stable+Experimental advisory canary。
+CI 包括：完整测试/静态检查、Stable/Experimental 官方接口审计、Pinned Stable 官方协议封存、Pinned Experimental 官方协议封存、Latest Stable+Experimental advisory canary。
 
 `npm run seal` 还会在目标主机启动真实官方 App Server 并调用官方导出 RPC。真正带用户账号的模型 turn 仍需要目标机存在有效官方登录凭据；测试不会把没有执行过的真实账号 E2E 冒充成已验证。
 

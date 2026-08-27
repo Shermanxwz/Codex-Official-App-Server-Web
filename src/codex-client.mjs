@@ -297,6 +297,10 @@ export class CodexAppServer extends EventEmitter {
     }
   }
 
+  #removePendingSignal(pending) {
+    if (pending?.signal && pending.onAbort) pending.signal.removeEventListener('abort', pending.onAbort);
+  }
+
   #onLine(line) {
     let message;
     try { message = JSON.parse(line); }
@@ -310,6 +314,7 @@ export class CodexAppServer extends EventEmitter {
       if (!pending) return;
       this.pending.delete(key);
       clearTimeout(pending.timer);
+      this.#removePendingSignal(pending);
       if (message.error) pending.reject(new CodexRpcError(message.error.message || 'Codex RPC error', message.error));
       else pending.resolve(message.result);
       return;
@@ -332,29 +337,55 @@ export class CodexAppServer extends EventEmitter {
     }
   }
 
-  #requestRaw(method, params = {}, timeoutMs = this.timeoutMs) {
+  #requestRaw(method, params = {}, timeoutMs = this.timeoutMs, signal = null) {
     if (this.pending.size >= this.maxPending) return Promise.reject(new CodexClientBusyError());
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const rejectAborted = () => {
+        const pending = this.pending.get(String(id));
+        if (!pending) return;
+        clearTimeout(pending.timer);
         this.pending.delete(String(id));
+        this.#removePendingSignal(pending);
+        const error = new Error(`Codex request aborted: ${method}`);
+        error.code = 'CODEX_RPC_ABORTED';
+        error.status = 499;
+        reject(error);
+      };
+      const timer = setTimeout(() => {
+        const pending = this.pending.get(String(id));
+        if (!pending) return;
+        this.pending.delete(String(id));
+        this.#removePendingSignal(pending);
         const error = new Error(`Codex request timed out: ${method}`);
         error.code = 'CODEX_RPC_TIMEOUT';
         reject(error);
       }, timeoutMs);
-      this.pending.set(String(id), { resolve, reject, timer, method });
+      const pending = { resolve, reject, timer, method, signal, onAbort: rejectAborted };
+      this.pending.set(String(id), pending);
+      if (signal) {
+        if (signal.aborted) { rejectAborted(); return; }
+        signal.addEventListener('abort', rejectAborted, { once: true });
+      }
       try { this.#send({ id, method, params }); }
       catch (error) {
         clearTimeout(timer);
         this.pending.delete(String(id));
+        this.#removePendingSignal(pending);
         reject(error);
       }
     });
   }
 
-  async request(method, params = {}, timeoutMs = this.timeoutMs) {
+  async request(method, params = {}, timeoutMs = this.timeoutMs, signal = null) {
     await this.start();
-    return this.#requestRaw(method, params, timeoutMs);
+    if (signal?.aborted) {
+      const error = new Error(`Codex request aborted: ${method}`);
+      error.code = 'CODEX_RPC_ABORTED';
+      error.status = 499;
+      throw error;
+    }
+    return this.#requestRaw(method, params, timeoutMs, signal);
   }
 
   async notify(method, params = {}) {
@@ -394,6 +425,7 @@ export class CodexAppServer extends EventEmitter {
   #failAll(error) {
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
+      this.#removePendingSignal(pending);
       pending.reject(error);
     }
     this.pending.clear();

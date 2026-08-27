@@ -10,11 +10,16 @@ const MAX_INVENTORY_CACHE = 64;
 const MAX_INVENTORY_ITEMS = 1000;
 const MAX_INVENTORY_PAGES = 20;
 const MAX_SLOT_HEIGHT = 1200;
+const MCP_RPC_TIMEOUT_MS = 45_000;
 const nativeFetch = window.fetch.bind(window);
 const items = new Map();
 const sessions = new Map();
 const inventoryCache = new Map();
+const inventoryInFlight = new Map();
+const mountInFlight = new Map();
 let eventSource = null;
+let eventWatchdog = null;
+let eventLastMessageAt = 0;
 let metaPromise = null;
 
 const css = document.createElement('link');
@@ -22,20 +27,34 @@ css.rel = 'stylesheet';
 css.href = '/mcp-app.css';
 document.head.append(css);
 
-function rpc(method, params = {}) {
-  return nativeFetch('/api/rpc', {
+async function fetchWithTimeout(input, init = {}, timeoutMs = MCP_RPC_TIMEOUT_MS) {
+  const callerSignal = init.signal;
+  const controller = new AbortController();
+  const forwardAbort = () => controller.abort(callerSignal?.reason);
+  if (callerSignal) {
+    if (callerSignal.aborted) forwardAbort();
+    else callerSignal.addEventListener('abort', forwardAbort, { once: true });
+  }
+  const timer = window.setTimeout(() => controller.abort(), Math.max(0, Number(timeoutMs) || MCP_RPC_TIMEOUT_MS));
+  try { return await nativeFetch(input, { ...init, signal: controller.signal }); }
+  finally { window.clearTimeout(timer); callerSignal?.removeEventListener('abort', forwardAbort); }
+}
+
+function rpc(method, params = {}, options = {}) {
+  return fetchWithTimeout('/api/rpc', {
     method: 'POST', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ method, params }),
-  }).then(async (response) => {
+    signal: options.signal,
+  }, options.timeoutMs).then(async (response) => {
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.message || body.error || `HTTP ${response.status}`);
+    if (!response.ok) { const error = new Error(body.message || body.error || `HTTP ${response.status}`); error.status = response.status; error.body = body; throw error; }
     return body.result;
   });
 }
 
 function meta() {
-  if (!metaPromise) metaPromise = nativeFetch('/api/meta', { credentials: 'same-origin' }).then((r) => r.ok ? r.json() : {}).catch(() => ({}));
+  if (!metaPromise) metaPromise = fetchWithTimeout('/api/meta', { credentials: 'same-origin' }).then((r) => r.ok ? r.json() : {}).catch((error) => { metaPromise = null; return {}; });
   return metaPromise;
 }
 
@@ -105,7 +124,9 @@ window.fetch = async function cwebMcpAwareFetch(input, init) {
 function startEvents() {
   if (eventSource) return;
   eventSource = new EventSource('/api/events', { withCredentials: true });
+  eventLastMessageAt = Date.now();
   eventSource.onmessage = (event) => {
+    eventLastMessageAt = Date.now();
     let envelope;
     try { envelope = JSON.parse(event.data); } catch { return; }
     if (envelope.type !== 'notification') return;
@@ -113,6 +134,13 @@ function startEvents() {
     if (!['item/started', 'item/completed'].includes(message?.method)) return;
     captureItem(message.params?.item, message.params?.threadId);
   };
+  eventSource.onopen = () => { eventLastMessageAt = Date.now(); };
+  eventSource.onerror = () => {};
+  if (eventWatchdog) clearInterval(eventWatchdog);
+  eventWatchdog = setInterval(() => {
+    if (!eventSource || Date.now() - eventLastMessageAt <= 35_000) return;
+    eventSource.close(); eventSource = null; startEvents();
+  }, 5_000);
 }
 
 function cssEscape(value) {
@@ -139,13 +167,16 @@ function showError(card, error) {
 
 async function paged(method, params, key) {
   const all = [];
+  const seenCursors = new Set();
   let cursor = null;
   for (let page = 0; page < MAX_INVENTORY_PAGES; page += 1) {
     const result = await rpc(method, { ...params, ...(cursor ? { cursor } : {}), limit: 100 });
     const values = Array.isArray(result?.[key]) ? result[key] : [];
     all.push(...values.slice(0, Math.max(0, MAX_INVENTORY_ITEMS - all.length)));
     if (all.length >= MAX_INVENTORY_ITEMS || !result?.nextCursor) break;
-    cursor = result.nextCursor;
+    const next = String(result.nextCursor);
+    if (seenCursors.has(next) || next === String(cursor || '')) break;
+    seenCursors.add(next); cursor = result.nextCursor;
   }
   return all;
 }
@@ -154,12 +185,19 @@ async function inventory(threadId, server) {
   const key = `${threadId || ''}\u0000${server}`;
   const cached = inventoryCache.get(key);
   if (cached && Date.now() - cached.at < 30_000) return cached.value;
-  const servers = await paged('mcpServerStatus/list', { detail: 'full', ...(threadId ? { threadId } : {}) }, 'data');
-  const value = servers.find((entry) => entry?.name === server) || null;
-  if (!value) throw new Error(`MCP server is not available: ${server}`);
-  inventoryCache.set(key, { at: Date.now(), value });
-  while (inventoryCache.size > MAX_INVENTORY_CACHE) inventoryCache.delete(inventoryCache.keys().next().value);
-  return value;
+  const pending = inventoryInFlight.get(key);
+  if (pending) return pending;
+  const task = (async () => {
+    const servers = await paged('mcpServerStatus/list', { detail: 'full', ...(threadId ? { threadId } : {}) }, 'data');
+    const value = servers.find((entry) => entry?.name === server) || null;
+    if (!value) throw new Error(`MCP server is not available: ${server}`);
+    inventoryCache.set(key, { at: Date.now(), value });
+    while (inventoryCache.size > MAX_INVENTORY_CACHE) inventoryCache.delete(inventoryCache.keys().next().value);
+    return value;
+  })();
+  inventoryInFlight.set(key, task);
+  try { return await task; }
+  finally { if (inventoryInFlight.get(key) === task) inventoryInFlight.delete(key); }
 }
 
 function listingUiMeta(serverInfo, uri) {
@@ -167,7 +205,7 @@ function listingUiMeta(serverInfo, uri) {
   return resource?._meta?.ui || resource?.meta?.ui || {};
 }
 
-async function readUiResource(record) {
+async function readUiResource(record, knownServerInfo = null) {
   const item = record.item;
   const uri = resourceUri(item);
   if (!uri) throw new Error('MCP tool call has no ui:// App resource');
@@ -178,7 +216,7 @@ async function readUiResource(record) {
     uri,
     ...(item.appContext?.connectorId ? { connectorId: item.appContext.connectorId } : {}),
   };
-  const [result, serverInfo] = await Promise.all([rpc('mcpServer/resource/read', params), inventory(record.threadId, item.server)]);
+  const [result, serverInfo] = await Promise.all([rpc('mcpServer/resource/read', params), knownServerInfo ? Promise.resolve(knownServerInfo) : inventory(record.threadId, item.server)]);
   const content = (result?.contents || []).find((entry) => entry?.uri === uri);
   if (!content) throw new Error(`MCP App resource not returned: ${uri}`);
   const validated = validateMcpAppResource(content, uri);
@@ -318,18 +356,28 @@ async function onMessage(session, event) {
   }
 }
 
-async function mount(id, card) {
+async function mountApp(id, card) {
   const record = items.get(id);
   if (!record || !resourceUri(record.item)) return;
+  if (card.dataset.mcpAppVisibility === 'hidden') return;
   const existing = sessions.get(id);
   if (existing?.card === card && existing.resourceUri === resourceUri(record.item)) return;
   if (existing) teardown(id, 'remount');
   while (sessions.size >= MAX_SESSIONS) teardown(sessions.keys().next().value, 'capacity');
 
+  const [metadata, serverInfo] = await Promise.all([meta(), inventory(record.threadId, record.item.server)]);
+  if (!document.contains(card)) return;
+  const tool = toolFromInventory(serverInfo, record.item.tool);
+  if (!toolVisibleToApp(tool)) {
+    // The inventory is the official authority for app visibility. Do not read
+    // or render a UI resource for a tool that the server did not expose to
+    // apps, even if an older timeline item still contains an appContext.
+    card.dataset.mcpAppVisibility = 'hidden';
+    return;
+  }
+  const { validated } = await readUiResource(record, serverInfo);
   let slot = card.querySelector('.mcp-app-slot');
   if (!slot) { slot = document.createElement('div'); slot.className = 'mcp-app-slot mcp-app-loading'; (card.querySelector('.activity-body') || card).append(slot); }
-  const [{ validated, serverInfo }, metadata] = await Promise.all([readUiResource(record), meta()]);
-  const tool = toolFromInventory(serverInfo, record.item.tool);
   const csp = normalizeResourceCsp(validated.meta?.csp || {});
   const permissions = buildGrantedPermissions(validated.meta?.permissions || {}, permissionAllowMap(metadata?.capabilities?.mcpAppPermissions));
   const frame = document.createElement('iframe');
@@ -363,6 +411,16 @@ async function mount(id, card) {
     teardown(id, 'sandbox-failed');
     throw error;
   }
+}
+
+function mount(id, card) {
+  const key = String(id || '');
+  if (!key) return Promise.resolve();
+  const pending = mountInFlight.get(key);
+  if (pending) return pending;
+  const task = mountApp(id, card);
+  mountInFlight.set(key, task);
+  return task.finally(() => { if (mountInFlight.get(key) === task) mountInFlight.delete(key); });
 }
 
 function teardown(id, reason) {

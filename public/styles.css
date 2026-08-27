@@ -334,6 +334,7 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
 .history-items-load:hover:not(:disabled){border-color:var(--strong);background:var(--soft)}
 .history-items-load:disabled{cursor:wait;opacity:.7}
 .history-items-loading{opacity:.82}
+.history-search-snippet{margin:8px 4px 0;padding:7px 9px;border-left:2px solid var(--accent);border-radius:6px;background:color-mix(in srgb,var(--accent) 7%,var(--panel));color:var(--muted);font-size:10px;line-height:1.45;overflow-wrap:anywhere}
 @media(max-width:760px){
   .turn-header-detail{display:inline;font-size:9px}
   .history-mode-button{min-height:38px}
@@ -344,6 +345,7 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
   .history-page-marker.with-search{top:68px}
   .history-items-placeholder{align-items:flex-start;flex-direction:column}
   .history-items-load{width:100%}
+  .history-search-snippet{margin-inline:2px;font-size:11px}
 }
 
 /* Full-history search is backed by the official occurrence index (with a

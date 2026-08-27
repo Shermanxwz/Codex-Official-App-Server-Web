@@ -19,7 +19,7 @@ const rules=[
 const failures=[];
 for(const file of files){const rel=path.relative(root,file),text=fs.readFileSync(file,'utf8');for(const rule of rules){if(rule.allow.some(x=>rel.endsWith(x)))continue;if(rule.re.test(text))failures.push(`${rule.name}: ${rel}`);}}
 const required=[
- 'src/schema-registry.mjs','src/codex-client.mjs','src/server.mjs','src/dynamic-tool-host.mjs',
+ 'src/schema-registry.mjs','src/codex-client.mjs','src/server.mjs','src/dynamic-tool-host.mjs','scripts/official-interface-audit.mjs',
  'public/index.html','public/app.js','public/protocol-support.js','public/mcp-app-core.js','public/mcp-app-host.js','public/mcp-sandbox-proxy.js','public/mcp-app.css',
  'README.md','README.zh-CN.md','SECURITY.md','ARCHITECTURE.md','docs/PRODUCTION_SEAL.md','docs/ARCHIVE_CONTRACT.md','docs/PROTOCOL_PARITY.md','docs/UPSTREAM_VALIDATION.md','docs/HOSTS.md',
  'deploy/codex-app-server-web.service','deploy/codex-official-app-server.service','scripts/source-manifest.mjs','SOURCE_MANIFEST.sha256'
@@ -29,11 +29,11 @@ const pkg=JSON.parse(fs.readFileSync(path.join(root,'package.json'),'utf8'));
 if(pkg.version!=='0.4.0')failures.push('package version must be 0.4.0');
 if(Object.keys(pkg.dependencies||{}).length)failures.push('runtime dependencies must remain empty');
 if(!String(pkg.engines?.node||'').includes('22.12'))failures.push('Node >=22.12 contract missing');
-for(const script of ['test','check','seal','seal:core','seal:protocol','manifest:verify'])if(!pkg.scripts?.[script])failures.push(`package script missing: ${script}`);
+for(const script of ['test','check','audit:official','seal','seal:core','seal:protocol','manifest:verify'])if(!pkg.scripts?.[script])failures.push(`package script missing: ${script}`);
 const server=fs.readFileSync(path.join(root,'src/server.mjs'),'utf8');
-for(const needle of ["'METHOD_NOT_IN_OFFICIAL_SCHEMA'","'NOTIFICATION_NOT_IN_OFFICIAL_SCHEMA'",'registry.getServerRequest','registry.getServerNotification','INITIALIZE_IS_MANAGED_BY_GATEWAY','scheduleCodexRestart','CWEB_PUBLIC_ORIGIN','server.headersTimeout','server.requestTimeout',"message.method === 'currentTime/read'",'dynamicToolHost.canHandle','MCP_APPS_EXTENSION','MCP_APPS_MIME','mcpAppsDoubleIframeSandbox: true','properties?.dynamicTools'])if(!server.includes(needle))failures.push(`server contract missing: ${needle}`);
+for(const needle of ["'METHOD_NOT_IN_OFFICIAL_SCHEMA'","'NOTIFICATION_NOT_IN_OFFICIAL_SCHEMA'","'INVALID_PARAMS_OBJECT'","'INVALID_JSON_OBJECT'","'INVALID_METHOD'","'INVALID_RESPONSE_ERROR'",'jsonObjectBody','methodEnvelope','registry.getServerRequest','registry.getServerNotification','INITIALIZE_IS_MANAGED_BY_GATEWAY','scheduleCodexRestart','CWEB_PUBLIC_ORIGIN','server.headersTimeout','server.requestTimeout',"message.method === 'currentTime/read'",'dynamicToolHost.canHandle','MCP_APPS_EXTENSION','MCP_APPS_MIME','mcpAppsDoubleIframeSandbox: true','properties?.dynamicTools',"eventFrame('heartbeat'"])if(!server.includes(needle))failures.push(`server contract missing: ${needle}`);
 const client=fs.readFileSync(path.join(root,'src/codex-client.mjs'),'utf8');
-for(const needle of ['stdio://','sanitizedCodexEnv()','maxPending','maxServerRequests','maxStdinBufferBytes','maxLineBytes','serverRequestsCleared'])if(!client.includes(needle))failures.push(`Codex client hardening missing: ${needle}`);
+for(const needle of ['stdio://','sanitizedCodexEnv()','maxPending','maxServerRequests','maxStdinBufferBytes','maxLineBytes','serverRequestsCleared','CODEX_RPC_ABORTED','signal.addEventListener'])if(!client.includes(needle))failures.push(`Codex client hardening missing: ${needle}`);
 if(/env:\s*\{\s*\.\.\.process\.env\s*\}/.test(client))failures.push('Codex child must not inherit raw Web process environment');
 const dynamicHost=fs.readFileSync(path.join(root,'src/dynamic-tool-host.mjs'),'utf8');
 for(const needle of ['shell: false','MAX_REQUEST_BYTES','maxOutputBytes','timeoutMs','inheritEnv',"startsWith('CWEB_')",'data:image','data:audio','maxConcurrent','this.children','RESERVED_NAMESPACES'])if(!dynamicHost.includes(needle))failures.push(`Dynamic Tool Host hardening missing: ${needle}`);
@@ -66,5 +66,5 @@ const config=fs.readFileSync(path.join(root,'src/config.mjs'),'utf8');
 for(const needle of ["CWEB_CODEX_TRANSPORT",'codexServerUrl','websocket'])if(!config.includes(needle))failures.push(`transport configuration missing: ${needle}`);
 if(/echo[^\n]*\$TOKEN/.test(installer))failures.push('installer must not print the access token');
 const app=fs.readFileSync(path.join(root,'public/app.js'),'utf8');
-for(const needle of ["thread/loaded/list","thread/resume","model/list","supportedReasoningEfforts","resyncAuthoritativeState","serverRequestsCleared"])if(!app.includes(needle))failures.push(`native UI archive behavior missing: ${needle}`);
+for(const needle of ["thread/loaded/list","thread/resume","model/list","supportedReasoningEfforts","resyncAuthoritativeState","serverRequestsCleared",'eventLastMessageAt','halfOpen','DEFAULT_API_TIMEOUT_MS','CWEB_HTTP_TIMEOUT','queueTerminalThreadRefresh','reconcileExternalOfficialActivity'])if(!app.includes(needle))failures.push(`native UI archive behavior missing: ${needle}`);
 if(failures.length){console.error(failures.join('\n'));process.exit(1);}console.log(`CHECK_OK files=${files.length} runtimeDependencies=0 officialSchemaGate=bidirectional mcpApps=double-iframe dynamicTools=experimental-no-shell protocolSeal=stable+experimental authDefault=on`);

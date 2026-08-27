@@ -103,11 +103,11 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /if\(!state\.fullHistoryMode\)\{renderQuickHistoryMarker\(\);return\}/);
   assert.match(app, /if\(!pager\?\.hasMore\)return/);
   assert.match(app, /thread\/turns\/list/);
-  assert.match(app, /itemsView:'summary'/);
+  assert.match(app, /itemsView:'notLoaded'/);
   assert.match(app, /thread\/items\/list/);
   assert.match(app, /HISTORY_ITEM_PAGE_SIZE/);
   const pagedHistory = app.slice(app.indexOf('async function readOfficialPagedThread'), app.indexOf('const readThreadForUiBeforeOfficialPaging'));
-  assert.match(pagedHistory, /itemsView:'summary'/);
+  assert.match(pagedHistory, /itemsView:'notLoaded'/);
   assert.doesNotMatch(pagedHistory, /itemsView:'full'/);
   assert.match(app, /itemsView:'full'/);
   assert.match(app, /QUICK_HISTORY_PAGE_SIZE/);
@@ -119,6 +119,10 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /historySearchQuery/);
   assert.match(app, /Official search found \{count\} thread sections/);
   assert.match(app, /thread\/searchOccurrences/);
+  assert.match(app, /historySearchController/);
+  assert.match(app, /historyOccurrenceSnippet/);
+  assert.match(app, /threadListInFlight/);
+  assert.match(app, /configReadInFlight/);
   assert.match(app, /OFFICIAL_SEARCH_PAGE_SIZE/);
   assert.match(app, /function officialHistoryPage/);
   assert.match(app, /running\?tr\('workInProgress'\)/);
@@ -138,6 +142,14 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.doesNotMatch(app, /desktopWriteProtection|controlDesktopGuardEnabled|桌面占用保护|Desktop ownership guard/);
   assert.doesNotMatch(html, /desktopGuardToggle|desktopGuardState|桌面占用保护/);
   assert.match(app, /eventReconnectWatchdog/);
+  assert.match(app, /eventLastMessageAt/);
+  assert.match(app, /halfOpen/);
+  assert.match(app, /DEFAULT_API_TIMEOUT_MS/);
+  assert.match(app, /CWEB_HTTP_TIMEOUT/);
+  assert.match(app, /queueTerminalThreadRefresh/);
+  assert.match(app, /reconcileExternalOfficialActivity/);
+  assert.match(app, /capabilityReadInFlight/);
+  assert.match(app, /siblingController/);
   assert.match(css, /\.history-older-control/);
   assert.match(css, /\.history-older-control\.with-search/);
   assert.match(css, /\.history-page-marker/);
@@ -243,6 +255,10 @@ test('runtime server advertises the implemented MCP Apps profile and gates Dynam
   assert.match(server, /turn\/diff\/updated.*turn\/moderationMetadata/);
   assert.match(config, /\['turn\/diff\/updated', 'turn\/moderationMetadata', \.\.\.list\('CWEB_NOTIFICATION_OPT_OUT'\)\]/);
   assert.match(server, /function compactRpcError/);
+  assert.match(server, /function jsonObjectBody/);
+  assert.match(server, /function methodEnvelope/);
+  assert.match(server, /INVALID_RESPONSE_ERROR/);
+  assert.match(server, /Object\.hasOwn\(body, 'result'\)/);
   assert.doesNotMatch(server, /rpc: error\.rpc/);
   assert.match(server, /new SessionStore\(12 \* 60 \* 60 \* 1000, 256, config\.token\)/);
   assert.match(server, /runtimeBootId/);
@@ -271,6 +287,10 @@ test('MCP Apps host bridge covers stable server tool/resource proxy surfaces', (
   }
   assert.match(host, /originCallId/);
   assert.match(host, /toolVisibleToApp/);
+  assert.match(host, /card\.dataset\.mcpAppVisibility === 'hidden'/);
+  assert.match(host, /if \(!toolVisibleToApp\(tool\)\)/);
+  assert.match(host, /mountInFlight/);
+  assert.match(host, /MCP_RPC_TIMEOUT_MS/);
   assert.match(host, /mcpServer\/resource\/read/);
   assert.match(host, /mcpServer\/tool\/call/);
 });
