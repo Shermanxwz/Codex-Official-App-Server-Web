@@ -22,7 +22,8 @@ SERVICE_FILE="$SERVICE_DIR/codex-app-server-web.service"
 OFFICIAL_ENV_FILE="$CONFIG_DIR/codex-official-app-server.env"
 OFFICIAL_SERVICE_FILE="$SERVICE_DIR/codex-official-app-server.service"
 NODE_BIN="$(command -v node || true)"
-CODEX_BIN="$(command -v codex || true)"
+CODEX_BIN_DISCOVERED="$(command -v codex || true)"
+CODEX_BIN="${CODEX_BIN_OVERRIDE:-$CODEX_BIN_DISCOVERED}"
 
 [[ -n "$NODE_BIN" ]] || { echo "Node.js 22.12+ is required" >&2; exit 1; }
 [[ -n "$CODEX_BIN" ]] || { echo "A working official codex CLI is required" >&2; exit 1; }
@@ -60,7 +61,23 @@ if [[ ! -f "$ENV_FILE" ]]; then
   echo "Generated a private access token in $ENV_FILE (mode 600); do not copy it into logs or shell history."
 else
   chmod 600 "$ENV_FILE"
-  if ! grep -q '^CWEB_CODEX_BIN=' "$ENV_FILE"; then
+  if [[ -n "${CODEX_BIN_OVERRIDE:-}" ]] && grep -q '^CWEB_CODEX_BIN=' "$ENV_FILE"; then
+    ENV_FILE="$ENV_FILE" CODEX_BIN="$CODEX_BIN" "$NODE_BIN" <<'NODE'
+const fs=require('node:fs');
+const file=process.env.ENV_FILE;
+const value=JSON.stringify(process.env.CODEX_BIN);
+const lines=fs.readFileSync(file,'utf8').split(/\n/);
+let replaced=false;
+const next=lines.map(line=>{
+  if(!line.startsWith('CWEB_CODEX_BIN='))return line;
+  if(replaced)return null;
+  replaced=true;
+  return `CWEB_CODEX_BIN=${value}`;
+}).filter(line=>line!==null);
+if(!replaced)next.push(`CWEB_CODEX_BIN=${value}`);
+fs.writeFileSync(file,next.join('\n'),{mode:0o600});
+NODE
+  elif ! grep -q '^CWEB_CODEX_BIN=' "$ENV_FILE"; then
     printf 'CWEB_CODEX_BIN=%s\n' "$(quote_env "$CODEX_BIN")" >> "$ENV_FILE"
   fi
   if ! grep -q '^CWEB_CODEX_TRANSPORT=' "$ENV_FILE"; then

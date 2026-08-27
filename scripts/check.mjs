@@ -20,7 +20,7 @@ const failures=[];
 for(const file of files){const rel=path.relative(root,file),text=fs.readFileSync(file,'utf8');for(const rule of rules){if(rule.allow.some(x=>rel.endsWith(x)))continue;if(rule.re.test(text))failures.push(`${rule.name}: ${rel}`);}}
 const required=[
  'src/schema-registry.mjs','src/codex-client.mjs','src/server.mjs','src/dynamic-tool-host.mjs','scripts/official-interface-audit.mjs',
- 'public/index.html','public/app.js','public/protocol-support.js','public/mcp-app-core.js','public/mcp-app-host.js','public/mcp-sandbox-proxy.js','public/mcp-app.css',
+ 'public/index.html','public/app.js','public/history-compat.js','public/protocol-support.js','public/mcp-app-core.js','public/mcp-app-host.js','public/mcp-sandbox-proxy.js','public/mcp-app.css',
  'README.md','README.zh-CN.md','SECURITY.md','ARCHITECTURE.md','docs/PRODUCTION_SEAL.md','docs/ARCHIVE_CONTRACT.md','docs/PROTOCOL_PARITY.md','docs/UPSTREAM_VALIDATION.md','docs/HOSTS.md',
  'deploy/codex-app-server-web.service','deploy/codex-official-app-server.service','scripts/source-manifest.mjs','SOURCE_MANIFEST.sha256'
 ];
@@ -60,11 +60,13 @@ for(const needle of ['Environment=CWEB_REQUIRE_AUTH=1','UMask=0077','KillMode=co
 const officialService=fs.readFileSync(path.join(root,'deploy/codex-official-app-server.service'),'utf8');
 for(const needle of ['app-server --listen','EnvironmentFile=-__ENV_FILE__','Restart=on-failure','KillMode=control-group','TimeoutStopSec=10','UMask=0077'])if(!officialService.includes(needle))failures.push(`persistent official service contract missing: ${needle}`);
 const installer=fs.readFileSync(path.join(root,'scripts/install-linux.sh'),'utf8');
-for(const needle of ['SERVICE_DIR="$HOME/.config/systemd/user"','CWEB_STATE_DIR=','CWEB_CONFIG_DIR=','CWEB_CODEX_TRANSPORT=websocket','CWEB_CODEX_SERVER_URL=','codex-official-app-server.service','systemctl --user is-active'])if(!installer.includes(needle))failures.push(`installer hardening missing: ${needle}`);
+for(const needle of ['SERVICE_DIR="$HOME/.config/systemd/user"','CWEB_STATE_DIR=','CWEB_CONFIG_DIR=','CWEB_CODEX_TRANSPORT=websocket','CWEB_CODEX_SERVER_URL=','CODEX_BIN_OVERRIDE','codex-official-app-server.service','systemctl --user is-active'])if(!installer.includes(needle))failures.push(`installer hardening missing: ${needle}`);
 if(!service.includes('EnvironmentFile=__ENV_FILE__'))failures.push('systemd unit must use the installer-resolved project EnvironmentFile');
 const config=fs.readFileSync(path.join(root,'src/config.mjs'),'utf8');
 for(const needle of ["CWEB_CODEX_TRANSPORT",'codexServerUrl','websocket'])if(!config.includes(needle))failures.push(`transport configuration missing: ${needle}`);
 if(/echo[^\n]*\$TOKEN/.test(installer))failures.push('installer must not print the access token');
 const app=fs.readFileSync(path.join(root,'public/app.js'),'utf8');
-for(const needle of ["thread/loaded/list","thread/resume","model/list","supportedReasoningEfforts","resyncAuthoritativeState","serverRequestsCleared",'eventLastMessageAt','halfOpen','DEFAULT_API_TIMEOUT_MS','CWEB_HTTP_TIMEOUT','queueTerminalThreadRefresh','reconcileExternalOfficialActivity'])if(!app.includes(needle))failures.push(`native UI archive behavior missing: ${needle}`);
+for(const needle of ["thread/loaded/list","thread/resume","model/list","supportedReasoningEfforts","resyncAuthoritativeState","serverRequestsCleared",'eventLastMessageAt','halfOpen','DEFAULT_API_TIMEOUT_MS','CWEB_HTTP_TIMEOUT','queueTerminalThreadRefresh','reconcileExternalOfficialActivity','historyPagingAvailable','historyThreadPagingAvailable','historyMode','disableExperimentalHistory','stableHistoryReload','isUnsupportedOfficialMethodError'])if(!app.includes(needle))failures.push(`native UI archive behavior missing: ${needle}`);
+const historyCompat=fs.readFileSync(path.join(root,'public/history-compat.js'),'utf8');
+for(const needle of ['isUnsupportedOfficialMethodError','hasOfficialHistoryPaging','-32601','thread/turns/list','thread/items/list'])if(!historyCompat.includes(needle))failures.push(`history compatibility fallback missing: ${needle}`);
 if(failures.length){console.error(failures.join('\n'));process.exit(1);}console.log(`CHECK_OK files=${files.length} runtimeDependencies=0 officialSchemaGate=bidirectional mcpApps=double-iframe dynamicTools=experimental-no-shell protocolSeal=stable+experimental authDefault=on`);

@@ -28,8 +28,11 @@
 
 ## History invariants
 
+- new threads request official paginated history when advertised; official `legacy` threads use stable `thread/read(includeTurns:true)` and never call paginated turn/item methods;
+
 - quick view always requests a fresh official recent `itemsView: notLoaded` page on an explicit thread selection, visibly labels the bounded recent window, never exposes an older-page control, and automatically hydrates every one of those ten Turns through official `thread/items/list` calls with bounded concurrency;
 - full-history mode is the only path that follows official cursors beyond the recent page; its conversation and work-process items remain per-Turn lazy reads, so selecting a thread does not aggregate the entire conversation or attachment payloads into one response;
+- schema presence is not treated as runtime proof: an unsupported optional history response disables experimental history once, clears only bounded Web history state, hides paging/search controls, and reloads the selected thread through stable `thread/read` without retrying the rejected method;
 - superseded history reads cannot overwrite a newer selection or its page cursor.
 
 ## Protocol invariants

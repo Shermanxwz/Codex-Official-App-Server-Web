@@ -26,7 +26,7 @@ See [Archive Contract](docs/ARCHIVE_CONTRACT.md), [Protocol Parity](docs/PROTOCO
 | --- | --- |
 | Official protocol | Runtime-generated JSON Schema + TypeScript contract, Stable/Experimental negotiation, fail-closed method gate, all current official ThreadItem renderers, and an Official APIs drawer for less-common exported methods. |
 | Conversation UX | Thread list, new/read/list/resume flows, official rename/archive/unarchive/delete actions, model and reasoning controls, official image input, interrupt, live steer, context compaction, and official turn duration. |
-| Fast history | Quick view shows the 10 newest Turns. It first reads a lightweight official `itemsView: notLoaded` page, then automatically hydrates all 10 Turns—including conversation and work-process items—through official `thread/items/list` calls with bounded concurrency. |
+| Fast history | Quick view shows the 10 newest Turns. It first reads a lightweight official `itemsView: notLoaded` page, then automatically hydrates all 10 Turns—including conversation and work-process items—through official `thread/items/list` calls with bounded concurrency. If an advertised optional history method is rejected at runtime, the client trips a one-way compatibility fallback to stable `thread/read` and hides the unavailable paging controls. |
 | Complete history | Full-history mode follows official cursors page by page. Older Turns and their work process are hydrated per Turn only when visible or explicitly requested; the quick view never exposes an older-page control. |
 | Search | Full-history keyword search uses official `thread/searchOccurrences` pages and official snippets, then supplements results with already-rendered work-process text. |
 | Live runtime | Per-client SSE queues, data heartbeats, reconnect/resync, official active-state tracking, real-time item/delta updates, live duration, persistent official plan card, terminal reconciliation, and retention of live work process when a Turn becomes final. |
@@ -62,6 +62,8 @@ Host page
 ```
 
 ## Normal Web UX
+
+New Web-created threads request the official `historyMode:'paginated'` contract whenever the pinned runtime advertises the paging methods. Existing `legacy` threads remain official threads and are read through stable `thread/read(includeTurns:true)`; experimental paging controls are hidden for them.
 
 Explicit quick-view thread selection bypasses stale browser cache and rereads the official recent ten-turn summary page, with a visible quick-view boundary. A fresh SSE connection receives the gateway's bounded active official-plan snapshot; terminal or empty-plan signals clear it.
 
@@ -110,7 +112,7 @@ For remote use, keep the service behind Tailscale, SSH tunneling, or an authenti
 | `CWEB_TOKEN` | empty | required when auth is enabled |
 | `CWEB_PUBLIC_ORIGIN` | empty | exact trusted public origin |
 | `CWEB_ACCESS_PROFILE` | `full` | `read`, `coding`, `admin`, or `full` |
-| `CWEB_EXPERIMENTAL` | `1` | enable the official experimental surface used for paginated history; set `0` only to force stable-only fallback |
+| `CWEB_EXPERIMENTAL` | `1` | enable the official experimental surface used for paginated history; set `0` to force stable-only fallback. Even when enabled, a runtime rejection of an advertised optional history method automatically switches the current Web process to stable `thread/read` without a retry loop |
 | `CWEB_MCP_APPS` | `1` | advertise/render the stable MCP Apps extension |
 | `CWEB_MCP_APP_PERMISSIONS` | empty | optional requested-permission allow-list; browser secure-context/Permissions Policy rules still apply |
 | `CWEB_DYNAMIC_TOOLS_FILE` | empty | v1 Dynamic Tool Host JSON configuration; requires `CWEB_EXPERIMENTAL=1` |
@@ -127,6 +129,14 @@ Detailed MCP App and Dynamic Tool contracts are in [docs/HOSTS.md](docs/HOSTS.md
 ```
 
 The installer writes only project-owned XDG config/state plus two systemd user services. It reuses the existing official Codex executable for the separate App Server but does not install, upgrade, authenticate, or mutate Codex itself. When the invoking shell has explicit proxy variables, it preserves them in mode-`600` service environments so the official runtime can reach its upstream on networks that require a local proxy.
+
+To pin the archive-validated runtime when more than one official Codex executable is installed, pass an explicit absolute path. This updates the existing Web runtime setting while preserving the access token and other operator settings:
+
+```bash
+CODEX_BIN_OVERRIDE=/absolute/path/to/codex ./scripts/install-linux.sh
+```
+
+Without the override, the installer discovers `codex` on `PATH`; it never installs or upgrades Codex.
 
 ## Reproducible seal
 

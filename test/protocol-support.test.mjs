@@ -90,6 +90,8 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /String\(id\)===String\(state\.currentThread\.id\)/);
   assert.match(app, /requestIdleCallback/);
   assert.match(app, /function readThreadForUi/);
+  assert.match(app, /if\(historyPagingAvailable\(\)\)p\.historyMode='paginated'/);
+  assert.match(app, /function historyThreadPagingAvailable\(thread=state\.currentThread\)/);
   assert.match(app, /function isActiveOfficialStatus/);
   assert.match(app, /state\.threadReadInFlight/);
   assert.match(app, /new AbortController\(\)/);
@@ -113,8 +115,9 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /sealedHydrateHistoryTurn\(requestTurn,block,\{force:true,allowActive:true\}\)/);
   assert.match(app, /function sealedResetHistoryPlaceholder/);
   assert.match(app, /sealedResetHistoryPlaceholder\(block,turn\)/);
+  assert.match(app, /async function readThreadForUi\(id,\{force=false,signal\}=\{\}\).*?if\(!historyPagingAvailable\(\)\)value=await rpc\('thread\/read',\{threadId:id,includeTurns:true\}/s);
   assert.match(app, /if\(!state\.fullHistoryMode\)void sealedHydrateQuickHistory\(state\.currentThread\)/);
-  assert.match(app, /if\(!state\.fullHistoryMode\|\|!timeline\|\|!hasRequest\('thread\/items\/list'\)\)return/);
+  assert.match(app, /if\(!state\.fullHistoryMode\|\|!timeline\|\|!historyThreadPagingAvailable\(\)\)return/);
   assert.match(app, /function sealedEnsureQuickTurnBlocks\(thread\)/);
   assert.match(app, /sealedRestoreCachedTurn\(key,turn\)/);
   assert.match(app, /historyTurnItemVersions/);
@@ -125,6 +128,9 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /adoptPendingTurnBlock\(id\)/);
   assert.match(app, /mergePreservedTurns\(state\.currentThread\.turns,thread\.turns\)/);
   const pagedHistory = app.slice(app.indexOf('async function readOfficialPagedThread'), app.indexOf('const readThreadForUiBeforeOfficialPaging'));
+  assert.match(pagedHistory, /source\?\.historyMode/);
+  assert.match(pagedHistory, /toLowerCase\(\)==='legacy'/);
+  assert.match(pagedHistory, /rpc\('thread\/read',\{threadId:id,includeTurns:true\}/);
   assert.match(pagedHistory, /itemsView:'notLoaded'/);
   assert.doesNotMatch(pagedHistory, /itemsView:'full'/);
   assert.match(app, /itemsView:'full'/);

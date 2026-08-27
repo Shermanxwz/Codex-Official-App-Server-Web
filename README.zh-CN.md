@@ -26,7 +26,7 @@
 | --- | --- |
 | 官方协议 | 启动时从官方 Codex 二进制生成 JSON Schema 与 TypeScript 契约，支持 Stable/Experimental 协商，schema gate 失败即关闭；覆盖当前官方 ThreadItem，并提供“官方接口”面板调用其余导出方法。 |
 | 会话体验 | 会话列表、新建/读取/列表/恢复，官方重命名/归档/取消归档/删除，模型与推理强度，官方图片输入，停止任务，实时调整方向，上下文压缩，以及官方 Turn 耗时。 |
-| 快速会话 | 快速会话显示最近 10 条 Turn；先用官方 `itemsView: notLoaded` 读取轻量结构，再通过官方 `thread/items/list`、有界并发自动补齐这 10 条的会话内容和工作过程。 |
+| 快速会话 | 快速会话显示最近 10 条 Turn；先用官方 `itemsView: notLoaded` 读取轻量结构，再通过官方 `thread/items/list`、有界并发自动补齐这 10 条的会话内容和工作过程。如果运行时拒绝了已声明的可选历史接口，网页会触发一次性兼容回退，改用稳定的 `thread/read`，并隐藏不可用的分页控件。 |
 | 历史完整会话 | 只有历史完整会话会沿官方游标逐页读取更早内容；更早 Turn 的会话内容和工作过程按 Turn、按可视区或明确操作懒加载，快速会话不显示更早分页按钮。 |
 | 会话搜索 | 使用官方 `thread/searchOccurrences` 分页和官方匹配摘要进行完整历史关键词搜索，并补充已经渲染的工作过程文本。 |
 | 实时运行 | 每个 SSE 客户端独立队列、数据心跳、断线重连与权威重同步、官方活动状态、实时 Item/delta、运行读秒、常驻官方计划卡片、终态核对，以及 Turn 完成后保留已收到的工作过程。 |
@@ -62,6 +62,8 @@ Host 页面
 ```
 
 ## Web 产品能力
+
+网页新建会话在固定运行时声明分页接口时，会明确请求官方 `historyMode:'paginated'` 契约。已有的 `legacy` 会话仍然是官方会话，网页改用稳定的 `thread/read(includeTurns:true)` 读取，并对它隐藏实验性分页控件。
 
 快速会话的显式会话选择会绕过旧浏览器缓存，重新读取官方最近 10 条摘要页，并显示快速视图边界；SSE 新连接会接收网关保存的有界活动官方计划快照，终态或空计划会清理它。
 
@@ -110,7 +112,7 @@ npm start
 | `CWEB_TOKEN` | 空 | 开启鉴权时必填 |
 | `CWEB_PUBLIC_ORIGIN` | 空 | 可信公网 exact origin |
 | `CWEB_ACCESS_PROFILE` | `full` | `read` / `coding` / `admin` / `full` |
-| `CWEB_EXPERIMENTAL` | `1` | 开启官方 experimental API（分页历史依赖此官方握手）；设为 `0` 可强制仅稳定协议回退 |
+| `CWEB_EXPERIMENTAL` | `1` | 开启官方 experimental API（分页历史依赖此官方握手）；设为 `0` 可强制仅稳定协议回退。即使开启了 experimental，只要运行时拒绝已声明的可选历史接口，也会自动切换本次 Web 进程的稳定 `thread/read`，不会循环重试 |
 | `CWEB_MCP_APPS` | `1` | 声明并渲染稳定 MCP Apps 扩展 |
 | `CWEB_MCP_APP_PERMISSIONS` | 空 | 可选权限 allow-list；最终仍受浏览器 secure-context / Permissions Policy 约束 |
 | `CWEB_DYNAMIC_TOOLS_FILE` | 空 | Dynamic Tool Host v1 JSON；要求 `CWEB_EXPERIMENTAL=1` |
@@ -127,6 +129,14 @@ MCP Apps 和 Dynamic Tool 的详细契约见 [docs/HOSTS.md](docs/HOSTS.md)。
 ```
 
 安装器只写项目自己的 XDG config/state 与两个 systemd user service；会复用现有官方 Codex 可执行文件启动独立 App Server，但不会安装、升级、登录或直接修改 Codex。
+
+如果机器上同时存在多个官方 Codex 可执行文件，可用绝对路径固定封存基线运行时。这个参数会更新已有 Web 运行时配置，同时保留访问令牌和其他运维设置：
+
+```bash
+CODEX_BIN_OVERRIDE=/absolute/path/to/codex ./scripts/install-linux.sh
+```
+
+不传 override 时，安装器从 `PATH` 查找 `codex`；它不会安装或升级 Codex。
 
 ## 封存检查
 
