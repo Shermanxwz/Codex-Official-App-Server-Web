@@ -20,6 +20,24 @@
 
 精确边界见 [封存契约](docs/ARCHIVE_CONTRACT.md)、[协议一致性](docs/PROTOCOL_PARITY.md)、[产品级 Host](docs/HOSTS.md)。
 
+## 全量特性总览
+
+| 领域 | 已实现能力 |
+| --- | --- |
+| 官方协议 | 启动时从官方 Codex 二进制生成 JSON Schema 与 TypeScript 契约，支持 Stable/Experimental 协商，schema gate 失败即关闭；覆盖当前官方 ThreadItem，并提供“官方接口”面板调用其余导出方法。 |
+| 会话体验 | 会话列表、新建/读取/列表/恢复，官方重命名/归档/取消归档/删除，模型与推理强度，官方图片输入，停止任务，实时调整方向，上下文压缩，以及官方 Turn 耗时。 |
+| 快速会话 | 快速会话显示最近 10 条 Turn；先用官方 `itemsView: notLoaded` 读取轻量结构，再通过官方 `thread/items/list`、有界并发自动补齐这 10 条的会话内容和工作过程。 |
+| 历史完整会话 | 只有历史完整会话会沿官方游标逐页读取更早内容；更早 Turn 的会话内容和工作过程按 Turn、按可视区或明确操作懒加载，快速会话不显示更早分页按钮。 |
+| 会话搜索 | 使用官方 `thread/searchOccurrences` 分页和官方匹配摘要进行完整历史关键词搜索，并补充已经渲染的工作过程文本。 |
+| 实时运行 | 每个 SSE 客户端独立队列、数据心跳、断线重连与权威重同步、官方活动状态、实时 Item/delta、运行读秒、常驻官方计划卡片、终态核对，以及 Turn 完成后保留已收到的工作过程。 |
+| 可靠发送 | 官方 `clientUserMessageId`、乐观显示、输入框立即清理、可持久化“正在确认”、有界权威核对，以及 10 分钟结果去重缓存，避免响应丢失后的重试产生重复 Turn。 |
+| 共享历史 | 只保留一个持久化的“网页写入”开关。其他官方客户端运行时网页仍可查看；是否允许并发写入由官方 App Server 决定，不再增加额外的桌面占用保护。 |
+| MCP Apps | 稳定 MCP Apps `2026-01-26` Host、官方资源/工具代理、可见性校验、不透明源双 iframe 沙箱、CSP/权限控制，以及有界 JSON-RPC bridge。 |
+| Dynamic Tools | 可选的 experimental 本机进程 Host，使用官方 `thread/start.dynamicTools`、`shell:false`、stdin JSON、严格资源边界；未匹配工具由官方返回 `-32601`。 |
+| 安全与运维 | 默认鉴权、写入 exact-origin 防护、访问配置、资源队列上限、凭据/环境隔离、Linux 独立托管官方 App Server，以及便携 stdio 启动模式。 |
+
+项目明确不调用 ChatGPT 私有接口、不复制 Codex 凭据或历史文件、不安装/升级 Codex，也不终止无关 Codex 进程。协议行为、账号状态、会话持久化、并发写入和上游限制始终由官方 App Server 负责。
+
 ## 架构
 
 ```text
@@ -28,9 +46,9 @@
   | MCP App Host bridge
   v
 Official Codex App Server Web
-  | 官方 JSON/TS schema gate
+  | 官方 JSON/TS schema + access-profile gate
   | 有界 Dynamic Tool process host
-  | stdio JSONL
+  | 官方 WebSocket（Linux service）/ stdio JSONL（便携模式）
   v
 codex app-server
   | Thread / Turn / Item / MCP / approvals / models / account

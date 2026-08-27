@@ -20,6 +20,24 @@ The archive baseline is pinned to official `@openai/codex` **0.149.1**. If the g
 
 See [Archive Contract](docs/ARCHIVE_CONTRACT.md), [Protocol Parity](docs/PROTOCOL_PARITY.md), and [Product Hosts](docs/HOSTS.md).
 
+## Feature map
+
+| Area | Implemented behavior |
+| --- | --- |
+| Official protocol | Runtime-generated JSON Schema + TypeScript contract, Stable/Experimental negotiation, fail-closed method gate, all current official ThreadItem renderers, and an Official APIs drawer for less-common exported methods. |
+| Conversation UX | Thread list, new/read/list/resume flows, official rename/archive/unarchive/delete actions, model and reasoning controls, official image input, interrupt, live steer, context compaction, and official turn duration. |
+| Fast history | Quick view shows the 10 newest Turns. It first reads a lightweight official `itemsView: notLoaded` page, then automatically hydrates all 10 Turns—including conversation and work-process items—through official `thread/items/list` calls with bounded concurrency. |
+| Complete history | Full-history mode follows official cursors page by page. Older Turns and their work process are hydrated per Turn only when visible or explicitly requested; the quick view never exposes an older-page control. |
+| Search | Full-history keyword search uses official `thread/searchOccurrences` pages and official snippets, then supplements results with already-rendered work-process text. |
+| Live runtime | Per-client SSE queues, data heartbeats, reconnect/resync, official active-state tracking, real-time item/delta updates, live duration, persistent official plan card, terminal reconciliation, and retention of live work process when a Turn becomes final. |
+| Reliable delivery | Official `clientUserMessageId`, optimistic rendering, immediate composer clearing, persisted “confirming” state, bounded reconciliation, and a ten-minute deduplication result cache prevent lost-response retries from creating duplicate Turns. |
+| Shared history | One persisted **Web writes** switch. Other official clients remain readable; only the official App Server decides whether a concurrent write is accepted. There is no extra desktop-ownership guard. |
+| MCP Apps | Stable MCP Apps `2026-01-26` host, official resource/tool proxying, visibility checks, opaque-origin double-iframe sandbox, CSP/permission enforcement, and bounded JSON-RPC bridge. |
+| Dynamic Tools | Optional experimental, operator-configured process handlers using official `thread/start.dynamicTools`, `shell:false`, stdin JSON, strict bounds, and official `-32601` for unmatched tools. |
+| Security and operations | Authentication by default, exact-origin protection for writes, access profiles, bounded resource queues, secret/environment isolation, separate supervised official App Server on Linux, and portable stdio startup. |
+
+The product deliberately does not emulate private ChatGPT endpoints, copy Codex credentials or history files, install/upgrade Codex, or kill unrelated Codex processes. The official App Server remains the authority for protocol behavior, account state, conversation persistence, concurrent writers, and upstream limits.
+
 ## Architecture
 
 ```text
@@ -28,9 +46,9 @@ Browser
   | MCP App Host bridge
   v
 Official Codex App Server Web
-  | official JSON/TS schema gate
+  | official JSON/TS schema + access-profile gate
   | bounded Dynamic Tool process host
-  | JSONL over stdio
+  | official WebSocket (Linux service) / stdio JSONL (portable)
   v
 codex app-server
   | Thread / Turn / Item / MCP / approvals / models / account
