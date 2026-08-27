@@ -795,7 +795,7 @@ function sealedCachedTurnItems(threadId,turnId){const key=sealedHistoryTurnKey(t
 function sealedRememberTurnItems(threadId,turnId,items){if(!threadId||!turnId||!Array.isArray(items))return;const key=sealedHistoryTurnKey(threadId,turnId);state.historyTurnItemsCache.delete(key);state.historyTurnItemsCache.set(key,items);while(state.historyTurnItemsCache.size>20)state.historyTurnItemsCache.delete(state.historyTurnItemsCache.keys().next().value)}
 function sealedRememberHydratedTurn(key){if(!key)return;state.historyHydratedTurns.delete(key);state.historyHydratedTurns.add(key);while(state.historyHydratedTurns.size>MAX_HISTORY_HYDRATED_TURNS)state.historyHydratedTurns.delete(state.historyHydratedTurns.keys().next().value)}
 function sealedRestoreCachedTurn(threadId,turn){if(!turn||!sealedHistorySummaryTurn(turn)||String(state.historyBypassItemCacheThread||'')===String(threadId||''))return turn;const items=sealedCachedTurnItems(threadId,turn.id);if(!items)return turn;sealedRememberHydratedTurn(sealedHistoryTurnKey(threadId,turn.id));return mergeLiveItemsIntoTurn(threadId,{...turn,items,itemsView:'full'})}
-function sealedQuickTurnNeedsHydration(threadId,turn){const key=sealedHistoryTurnKey(threadId,turn?.id);if(sealedHistorySummaryTurn(turn))return !sealedCachedTurnItems(threadId,turn?.id);const id=String(turn?.id||''),activeIds=new Set([state.activeTurnId,state.officialActiveTurnId,state.localTurnId].filter(Boolean).map(String));return Boolean(id&&activeIds.has(id)&&!state.historyHydratedTurns.has(key))}
+function sealedQuickTurnNeedsHydration(threadId,turn,block=null){const key=sealedHistoryTurnKey(threadId,turn?.id);if(sealedHistorySummaryTurn(turn)){const placeholder=Boolean(block?.querySelector('.history-items-placeholder'));return placeholder||!sealedCachedTurnItems(threadId,turn?.id)}const id=String(turn?.id||''),activeIds=new Set([state.activeTurnId,state.officialActiveTurnId,state.localTurnId].filter(Boolean).map(String));return Boolean(id&&activeIds.has(id)&&!state.historyHydratedTurns.has(key))}
 function sealedRemoveHistoryChrome(root=$('timeline')){root?.querySelectorAll('.history-older-control,.history-page-marker').forEach(node=>node.remove())}
 function sealedHistoryOwnsActiveTurn(threadId,turnId){const marker=readLocalTurnMarker(),id=String(turnId||'');return Boolean(id&&((marker?.threadId===String(threadId||'')&&marker.turnId===id)||(localWebTurnActive()&&String(state.currentThread?.id||'')===String(threadId||'')&&String(state.activeTurnId||'')===id)))}
 
@@ -822,6 +822,14 @@ function sealedHistoryPlaceholder(block,turn){
   holder.append(label,button);block.append(holder);return block;
 }
 
+function sealedResetHistoryPlaceholder(block,turn){
+  if(!block)return;
+  block.classList.remove('history-items-loading');
+  const notLoaded=String(turn?.itemsView||'').toLowerCase()==='notloaded',quick=!state.fullHistoryMode,label=block.querySelector('.history-items-label'),button=block.querySelector('.history-items-load');
+  if(label)label.textContent=tr(quick?'historyQuickLoading':notLoaded?'historyConversationLazy':'historyItemsLazy');
+  if(button){button.disabled=false;button.textContent=tr(notLoaded?'historyLoadConversation':'historyLoadItems')}
+}
+
 function sealedReplaceTurnBlock(turn,{preserveOptimistic=false}={}){
   const timeline=$('timeline'),id=String(turn?.id||''),old=id&&timeline?.querySelector(`[data-turn-id="${CSS.escape(id)}"]`);if(!old)return;
   const optimistic=preserveOptimistic?[...old.querySelectorAll('[data-optimistic-user="1"]')].map(node=>node.cloneNode(true)):[],workGroup=old.querySelector('.work-group'),wasWorkOpen=Boolean(workGroup?.open),beforeHeight=timeline.scrollHeight,beforeTop=timeline.scrollTop,wasNearBottom=nearBottom(),rootTop=timeline.getBoundingClientRect().top,oldTop=old.getBoundingClientRect().top;
@@ -843,14 +851,14 @@ async function sealedHydrateHistoryTurn(turn,block,{force=false,announce=false,a
   if(block)block.classList.add('history-items-loading');if(button){button.disabled=true;button.textContent=tr('historyItemsLoading')}if(label)label.textContent=tr('historyItemsLoading');
   const task=(async()=>{try{
     const items=await sealedReadTurnItems(threadId,turnId,{signal:controller.signal});
-    if(controller.signal.aborted||String(state.currentThread?.id||'')!==threadId)return;
+    if(controller.signal.aborted||String(state.currentThread?.id||'')!==threadId){sealedResetHistoryPlaceholder(block,turn);return}
     const preserveLiveBlock=ownsActive&&localWebTurnActive()&&Boolean(block?.querySelector('[data-optimistic-user="1"]')),cache=readVersion===sealedHistoryTurnVersion(threadId,turnId);sealedApplyTurnItems(threadId,turnId,items,block,{preserveOptimistic:preserveLiveBlock,cache});
-  }catch(error){if(announce&&error?.name!=='AbortError')toast(`${tr('sendFailed')}: ${error?.message||error}`, 'error');const notLoaded=String(turn?.itemsView||'').toLowerCase()==='notloaded';if(button){button.disabled=false;button.textContent=tr(notLoaded?'historyLoadConversation':'historyLoadItems')}if(label)label.textContent=tr(notLoaded?'historyConversationLazy':'historyItemsLazy')}
+  }catch(error){sealedResetHistoryPlaceholder(block,turn);if(announce&&error?.name!=='AbortError')toast(`${tr('sendFailed')}: ${error?.message||error}`, 'error')}
   finally{block?.classList.remove('history-items-loading');if(state.historyItemsInFlight.get(key)===task)state.historyItemsInFlight.delete(key)}})();
   state.historyItemsInFlight.set(key,task);return task;
 }
 
-function sealedResetHistoryHydration(){state.historyQuickHydrationGeneration+=1;state.historyHydrationObserver?.disconnect();state.historyHydrationObserver=null;state.historyHydrationController?.abort();state.historyHydrationController=null;state.historyItemsInFlight.clear()}
+function sealedResetHistoryHydration(){state.historyQuickHydrationGeneration+=1;for(const key of state.historyItemsInFlight.keys()){const turnId=String(key).split(':').slice(1).join(':');const block=$('timeline')?.querySelector(`[data-turn-id="${CSS.escape(turnId)}"]`);if(block)sealedResetHistoryPlaceholder(block,sealedHistoryTurn(state.currentThread?.id,turnId))}state.historyHydrationObserver?.disconnect();state.historyHydrationObserver=null;state.historyHydrationController?.abort();state.historyHydrationController=null;state.historyItemsInFlight.clear()}
 function sealedWatchHistoryBlocks(){
   const timeline=$('timeline');if(!state.fullHistoryMode||!timeline||!hasRequest('thread/items/list'))return;
   const blocks=[...timeline.querySelectorAll(':scope > .turn-block[data-history-items-view]')];if(!blocks.length)return;
@@ -869,9 +877,9 @@ function sealedEnsureQuickTurnBlocks(thread){
 
 async function sealedHydrateQuickHistory(thread){
   const source=state.currentThread?.id&&String(state.currentThread.id)===String(thread?.id||'')?state.currentThread:thread,threadId=String(source?.id||'');if(state.fullHistoryMode||!threadId||!hasRequest('thread/items/list'))return;
-  sealedEnsureQuickTurnBlocks(source);const generation=state.historyQuickHydrationGeneration,turns=(Array.isArray(source?.turns)?source.turns:[]).filter(turn=>sealedQuickTurnNeedsHydration(threadId,turn));if(!turns.length)return;
+  sealedEnsureQuickTurnBlocks(source);const blockFor=turn=>$('timeline')?.querySelector(`[data-turn-id="${CSS.escape(String(turn?.id||''))}"]`),generation=state.historyQuickHydrationGeneration,turns=(Array.isArray(source?.turns)?source.turns:[]).filter(turn=>sealedQuickTurnNeedsHydration(threadId,turn,blockFor(turn)));if(!turns.length)return;
   const controller=state.historyHydrationController?.signal.aborted?new AbortController():state.historyHydrationController||new AbortController();state.historyHydrationController=controller;let nextIndex=turns.length;
-  const worker=async()=>{for(;;){if(generation!==state.historyQuickHydrationGeneration||controller.signal.aborted||state.fullHistoryMode||String(state.currentThread?.id||'')!==threadId)return;const index=nextIndex-=1;if(index<0)return;const turn=turns[index],block=$('timeline')?.querySelector(`[data-turn-id="${CSS.escape(String(turn?.id||''))}"]`);if(!block)continue;const requestTurn=sealedHistorySummaryTurn(turn)?turn:{...turn,itemsView:'notLoaded'};await sealedHydrateHistoryTurn(requestTurn,block,{allowActive:true})}};
+  const worker=async()=>{for(;;){if(generation!==state.historyQuickHydrationGeneration||controller.signal.aborted||state.fullHistoryMode||String(state.currentThread?.id||'')!==threadId)return;const index=nextIndex-=1;if(index<0)return;const turn=turns[index],block=blockFor(turn);if(!block)continue;const requestTurn=sealedHistorySummaryTurn(turn)?turn:{...turn,itemsView:'notLoaded'};await sealedHydrateHistoryTurn(requestTurn,block,{force:true,allowActive:true})}};
   await Promise.all(Array.from({length:Math.min(QUICK_HISTORY_HYDRATION_CONCURRENCY,turns.length)},()=>worker()));
 }
 

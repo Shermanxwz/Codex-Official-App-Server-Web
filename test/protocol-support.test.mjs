@@ -108,8 +108,11 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /HISTORY_ITEM_PAGE_SIZE/);
   assert.match(app, /QUICK_HISTORY_HYDRATION_CONCURRENCY=2/);
   assert.match(app, /function sealedHydrateQuickHistory\(thread\)/);
-  assert.match(app, /function sealedQuickTurnNeedsHydration\(threadId,turn\)/);
-  assert.match(app, /sealedHydrateHistoryTurn\(requestTurn,block,\{allowActive:true\}\)/);
+  assert.match(app, /function sealedQuickTurnNeedsHydration\(threadId,turn,block=null\)/);
+  assert.match(app, /placeholder\|\|!sealedCachedTurnItems/);
+  assert.match(app, /sealedHydrateHistoryTurn\(requestTurn,block,\{force:true,allowActive:true\}\)/);
+  assert.match(app, /function sealedResetHistoryPlaceholder/);
+  assert.match(app, /sealedResetHistoryPlaceholder\(block,turn\)/);
   assert.match(app, /if\(!state\.fullHistoryMode\)void sealedHydrateQuickHistory\(state\.currentThread\)/);
   assert.match(app, /if\(!state\.fullHistoryMode\|\|!timeline\|\|!hasRequest\('thread\/items\/list'\)\)return/);
   assert.match(app, /function sealedEnsureQuickTurnBlocks\(thread\)/);
