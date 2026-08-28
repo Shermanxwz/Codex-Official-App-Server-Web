@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
-import { readJson, safeEqualText, SessionStore, SlidingRateLimit } from '../src/security.mjs';
+import { canonicalExactOrigin, readJson, safeEqualText, SessionStore, SlidingRateLimit } from '../src/security.mjs';
 
 function request(body, contentType='application/json'){
   const req=Readable.from(body ? [Buffer.from(body)] : []);
@@ -25,6 +25,14 @@ test('auth primitives fail closed',()=>{
   const signedA=new SessionStore(60_000,3,'private-test-secret'),signedToken=signedA.create(),signedB=new SessionStore(60_000,3,'private-test-secret');
   assert.equal(signedB.has(signedToken),true); assert.equal(new SessionStore(60_000,3,'other-secret').has(signedToken),false); signedA.delete(signedToken); assert.equal(signedA.has(signedToken),false);
   const rate=new SlidingRateLimit(2,1000); assert.equal(rate.allow('x'),true); assert.equal(rate.allow('x'),true); assert.equal(rate.allow('x'),false);
+});
+
+test('public origin accepts only the canonical browser Origin spelling', () => {
+  assert.equal(canonicalExactOrigin('https://codex.example.com'), 'https://codex.example.com');
+  assert.equal(canonicalExactOrigin('http://127.0.0.1:4173'), 'http://127.0.0.1:4173');
+  for (const value of ['https://codex.example.com/', 'HTTPS://codex.example.com', 'https://codex.example.com:443', 'https://user@codex.example.com', 'https://codex.example.com/path', 'javascript:alert(1)']) {
+    assert.equal(canonicalExactOrigin(value), '');
+  }
 });
 
 

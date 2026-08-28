@@ -7,7 +7,7 @@
 - state-changing API requests require same-origin validation;
 - the Linux archive deployment runs the official App Server as a separate supervised WebSocket service; the Web gateway may also use the portable owned stdio child mode;
 - the official service binds only to loopback, and receives no Web session token or other `CWEB_*` setting;
-- RPCs, server requests, stdin, JSONL lines, HTTP bodies, SSE clients/events/queues, sessions and rate-limit keys are bounded; each SSE client has an independent keep-alive and backpressure boundary;
+- RPCs, server requests, stdin, JSONL lines, HTTP bodies, SSE clients/events/queues, sessions and rate-limit keys are bounded; each SSE client has an independent keep-alive and backpressure boundary, and no individual event frame may consume that entire queue budget;
 - crashes clear stale ServerRequests and restart with bounded exponential delay;
 - disconnected/expired browser reads cancel their gateway-side pending RPC slot; uncertain `turn/start` and `turn/steer` requests remain deduplicated by the official client message id instead of being replayed;
 - shutdown terminates only owned children.
@@ -42,6 +42,8 @@
 - browser JSON envelopes and method parameters are object-shaped and method names are non-empty, bounded strings; server responses preserve valid JSON `null` results and reject malformed error objects;
 - the repository-wide official-interface audit proves every browser RPC/notification, server-request disposition and rendered ThreadItem belongs to the generated Stable/Experimental contract;
 - Stable and Experimental ServerRequest/ThreadItem dispositions are sealed separately;
+- every schema-admitted ServerNotification is written to a bounded, size-capped Official Events observer before specialized state/timeline handling; oversized payloads retain method identity and byte size without retaining the body;
+- the default handshake opts out of no official notifications; explicit `CWEB_NOTIFICATION_OPT_OUT` remains available for an operator who deliberately accepts reduced observability;
 - MCP Apps is advertised only when required official MCP proxy methods are present;
 - configured Dynamic Tools require experimental mode and an official experimental `thread/start.dynamicTools` schema field.
 

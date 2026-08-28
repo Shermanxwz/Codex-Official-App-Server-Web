@@ -88,6 +88,33 @@ process.exit(2);
 `,{mode:0o755});return file;
 }
 
+function fakeOversizeNotificationCodex(dir){
+  const file=path.join(dir,'codex');
+  fs.writeFileSync(file,`#!/usr/bin/env node
+const fs=require('node:fs'),path=require('node:path'),readline=require('node:readline');
+const args=process.argv.slice(2);
+if(args[0]==='--version'){console.log('codex-cli 9.9.9-oversize-notification-test');process.exit(0)}
+if(args[0]==='app-server'&&args[1]==='generate-json-schema'){
+ const out=args[args.indexOf('--out')+1];fs.mkdirSync(out,{recursive:true});
+ const req={definitions:{InitializeParams:{type:'object'}},oneOf:[{title:'InitializeRequest',properties:{id:{},method:{enum:['initialize']},params:{$ref:'#/definitions/InitializeParams'}},required:['id','method','params']}]};
+ const empty={definitions:{},oneOf:[]};
+ const note={definitions:{},oneOf:[{title:'ProcessOutputDeltaNotification',properties:{method:{enum:['process/outputDelta']},params:{type:'object'}},required:['method','params']}]};
+ for(const [name,data] of [['ClientRequest.json',req],['ClientNotification.json',empty],['ServerRequest.json',empty],['ServerNotification.json',note]])fs.writeFileSync(path.join(out,name),JSON.stringify(data));process.exit(0);
+}
+if(args[0]==='app-server'&&args[1]==='generate-ts'){
+ const out=args[args.indexOf('--out')+1];fs.mkdirSync(out,{recursive:true});
+ fs.writeFileSync(path.join(out,'ClientRequest.ts'),'export type ClientRequest={"method":"initialize"};');
+ fs.writeFileSync(path.join(out,'ServerNotification.ts'),'export type ServerNotification={"method":"process/outputDelta"};');
+ for(const name of ['ClientNotification.ts','ServerRequest.ts'])fs.writeFileSync(path.join(out,name),'export type Empty=never;');process.exit(0);
+}
+if(args[0]==='app-server'){
+ const rl=readline.createInterface({input:process.stdin});
+ rl.on('line',line=>{const m=JSON.parse(line);if(m.method==='initialize'){console.log(JSON.stringify({id:m.id,result:{codexHome:'/fake',platformFamily:'unix',platformOs:'linux'}}));return setTimeout(()=>console.log(JSON.stringify({method:'process/outputDelta',params:{delta:'x'.repeat(80*1024)}})),1200)}if(m.method==='initialized')return;if(m.id!==undefined)console.log(JSON.stringify({id:m.id,result:{}}));});return;
+}
+process.exit(2);
+`,{mode:0o755});return file;
+}
+
 function fakeActiveWriterCodex(dir){
   const file=path.join(dir,'codex');
   fs.writeFileSync(file,`#!/usr/bin/env node
@@ -127,7 +154,7 @@ test('full HTTP gateway admits only methods exported by official schema', async(
   const login=await fetch(`${url}/api/login`,{method:'POST',headers:{'content-type':'application/json',origin},body:JSON.stringify({token})});
   assert.equal(login.status,200,logs); const cookie=login.headers.get('set-cookie').split(';',1)[0];
   assert.equal((await fetch(`${url}/healthz`)).status,200); assert.equal((await fetch(`${url}/readyz`)).status,200);
-  const meta=await (await fetch(`${url}/api/meta`,{headers:{cookie}})).json(); assert.match(meta.runtime.bootId,/^[0-9a-f-]{36}$/); assert.equal(typeof meta.runtime.startedAt,'number');
+  const meta=await (await fetch(`${url}/api/meta`,{headers:{cookie}})).json(); assert.match(meta.runtime.bootId,/^[0-9a-f-]{36}$/); assert.equal(typeof meta.runtime.startedAt,'number'); assert.deepEqual(meta.capabilities.optOutNotificationMethods,[]); assert.equal(meta.protocolSupport.serverNotificationFallback,'official-event-log');
   const methods=await (await fetch(`${url}/api/methods`,{headers:{cookie}})).json(); assert.deepEqual(methods.requests.map(x=>x.method),['initialize','thread/list']);
   assert.equal(methods.requests.find(x=>x.method==='initialize').managed,true);
   const schema=await (await fetch(`${url}/api/method-schema?kind=requests&method=${encodeURIComponent('thread/list')}`,{headers:{cookie}})).json();
@@ -174,6 +201,24 @@ test('a fresh SSE connection receives the latest active official plan snapshot',
   const secondResponse=await fetch(url+'/api/events',{headers:{cookie}}),second=sseReader(secondResponse),replayed=await sseNextWithTimeout(second);
   assert.equal(secondResponse.status,200,logs);assert.equal(replayed.type,'connected',`${JSON.stringify(replayed)}\n${logs}`);assert.equal(replayed.payload.activePlans.length,1,`${JSON.stringify(replayed)}\n${logs}`);assert.equal(replayed.payload.activePlans[0].method,'turn/plan/updated');assert.equal(replayed.payload.activePlans[0].params.turnId,'turn-1');assert.equal(replayed.payload.activePlans[0].params.plan[0].status,'inProgress');await second.cancel();
   child.kill('SIGTERM');await new Promise(resolve=>child.once('exit',resolve));
+});
+
+test('an oversized official notification becomes bounded metadata without breaking SSE', async(t)=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cweb-event-oversize-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const codex=fakeOversizeNotificationCodex(dir),port=await getFreePort(),url=`http://127.0.0.1:${port}`,token='oversize-notification-test-token';let logs='';
+  const child=spawn(process.execPath,['src/server.mjs'],{cwd:root,env:{...process.env,CWEB_CODEX_BIN:codex,CWEB_STATE_DIR:path.join(dir,'state'),CWEB_WORKSPACE:dir,CWEB_HOST:'127.0.0.1',CWEB_PORT:String(port),CWEB_REQUIRE_AUTH:'1',CWEB_TOKEN:token,CWEB_MCP_APPS:'0',CWEB_SSE_MAX_BUFFER:'65536',CWEB_EVENT_MAX_BYTES:'1048576'},stdio:['ignore','pipe','pipe']});
+  child.stdout.on('data',x=>logs+=x);child.stderr.on('data',x=>logs+=x);t.after(()=>{if(child.exitCode===null)child.kill('SIGTERM')});await waitReady(url,child);
+  const origin=url,login=await fetch(url+'/api/login',{method:'POST',headers:{'content-type':'application/json',origin},body:JSON.stringify({token})});assert.equal(login.status,200,logs);const cookie=login.headers.get('set-cookie').split(';',1)[0];
+  const response=await fetch(url+'/api/events',{headers:{cookie}}),reader=sseReader(response);t.after(()=>reader.cancel());
+  assert.equal((await sseNextWithTimeout(reader)).type,'connected');
+  const oversize=await sseNextWithTimeout(reader,5_000);
+  assert.equal(oversize.type,'eventOversize',`${JSON.stringify(oversize)}\n${logs}`);
+  assert.equal(oversize.payload.originalType,'notification');
+  assert.equal(oversize.payload.method,'process/outputDelta');
+  assert.ok(oversize.payload.bytes>65_536);
+  const changed=await fetch(url+'/api/control',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({webWriteEnabled:false})});assert.equal(changed.status,200,logs);
+  assert.equal((await sseNextWithTimeout(reader)).type,'controlChanged');
+  await reader.cancel();child.kill('SIGTERM');await new Promise(resolve=>child.once('exit',resolve));
 });
 
 test('multiple SSE clients stay independent when one client disconnects', async(t)=>{

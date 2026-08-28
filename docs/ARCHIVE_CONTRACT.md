@@ -6,7 +6,7 @@ This document defines what “final archive” means for this repository.
 
 - application version: `0.4.0`
 - Node.js: `>=22.12.0`
-- validated official Codex: `@openai/codex 0.149.1`
+- validated official Codex: `@openai/codex 0.150.1`
 - product transport: official `codex app-server --listen ws://127.0.0.1:43999` under the Linux installer’s separate systemd user service; portable stdio remains supported for manual startup
 - runtime npm dependencies: zero
 - MCP Apps protocol: stable `2026-01-26`
@@ -28,6 +28,8 @@ A sealed source tree must pass:
 7. pinned experimental official protocol seal
 8. latest stable+experimental advisory canary
 
+The deployment host must additionally pass `CWEB_RUNTIME_SMOKE_MODEL_TURN=1 npm run smoke:runtime` against the exact pinned binary and `CWEB_GATEWAY_MODEL_TURN=1 npm run smoke:gateway` against the published origin before publication. The first proves the runtime directly. The second repeats the authenticated model Turn through HTTP auth, origin enforcement, SSE/heartbeat and any reverse tunnel; both validate the persisted Turn/items including a unique assistant sentinel and delete the test thread in `finally` cleanup.
+
 The CI-tested pull-request head tree and the squash-merged `main` tree must be byte-identical even though their commit SHAs differ.
 
 ## Official-interface rule
@@ -37,6 +39,8 @@ The gateway may invoke only methods present in the installed official App Server
 The human-facing Web surface includes official image input, an inventory summary for MCP servers/Skills/Plugins/installed Apps, and a collapsed technical view for method identifiers, schemas, parameters, and results. Image attachments are bounded and sent as the official `UserInput` `image` variant; arbitrary generic-file upload is not invented where the official protocol has no such input variant.
 
 Server-initiated requests require an explicit disposition. Unknown official evolution is fail-closed. Platform-only token refresh and attestation are rejected instead of emulated.
+
+Every schema-admitted server notification is observable through the bounded Official Events log before first-class timeline/state handling. This universal fallback is an observability disposition, not a claim that every transport/process event belongs in the conversation timeline.
 
 ## Host rule
 

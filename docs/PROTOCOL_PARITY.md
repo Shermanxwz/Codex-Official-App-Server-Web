@@ -4,11 +4,13 @@
 
 The installed official `codex` binary is the protocol authority. The gateway generates both JSON Schema and TypeScript with `codex app-server generate-json-schema` and `generate-ts`; JSON wire methods not covered by the TypeScript export fail closed.
 
-Archive baseline: `@openai/codex 0.149.1`.
+Archive baseline: `@openai/codex 0.150.1`.
 
 ## Stable surface
 
 All exported stable ClientRequest/ClientNotification methods are schema-gated. `initialize`/`initialized` are gateway-managed; remaining allowed methods are invocable through native UX or the Official APIs drawer.
+
+Every exported ServerNotification has a universal `official-event-log` disposition before any specialized handler runs. The observer retains at most 200 complete entries and 1 MiB, replaces an individual payload above 128 KiB with method/size metadata, and is cleared explicitly by the operator or on page reload. Conversation rendering remains intentionally narrower so process, realtime and MCP event-stream notifications are observable without being misrepresented as chat messages.
 
 The first-class timeline has an explicit disposition for every sealed official ThreadItem variant: `userMessage`, `hookPrompt`, `agentMessage`, `plan`, `reasoning`, `commandExecution`, `fileChange`, `mcpToolCall`, `dynamicToolCall`, `collabAgentToolCall`, `subAgentActivity`, `webSearch`, `imageView`, `sleep`, `imageGeneration`, `enteredReviewMode`, `exitedReviewMode`, `contextCompaction`.
 
@@ -38,9 +40,11 @@ New Web threads select `historyMode:'paginated'` when the experimental history s
 
 `CWEB_EXPERIMENTAL=1` asks Codex to export/accept experimental protocol. The experimental seal separately regenerates the protocol and requires `currentTime/read` plus `thread/start.dynamicTools` on the pinned archive baseline. The pinned baseline also exposes the official `thread/turns/list`, `thread/items/list`, and `thread/searchOccurrences` history surfaces there; the Web client keeps quick view bounded to the 10 most recent Turn structures with one official `itemsView: notLoaded` page and no older-page control, then automatically hydrates those ten Turns through `thread/items/list` with bounded concurrency. Full-history mode alone walks cursors page-by-page with a sticky page marker/control; only older full-history Turn items are hydrated as the Turn approaches the viewport or on explicit request. Large official pages automatically retry at a smaller page size. If the runtime rejects an advertised optional history method, the browser disables that experimental history path for the process and reloads the selected thread once through stable `thread/read`; the rejected method is never retried in a loop. Full-history keyword search uses the official occurrence index, displays official snippets, loads the pages required to reveal matching Turns, and supplements them with a local pass over already-rendered work-process text. Human-facing running state follows the selected thread's official `turn/started`, `turn/*` terminal, and `thread/status/changed` events; the latter is handled at thread level because the official active-status payload does not carry a `turnId`. Local Web ownership is promoted only after a Web-issued `turn/start` is matched by the official `turn/started` event. Bounded periodic official read-only reconciliation covers both local and foreign active turns, and a terminal event schedules delayed authoritative reads so a missed `turn/completed` cannot leave the final answer or running state stale. External official activity cannot fabricate Web stop/context/plan UI; only the local Web turn marker enables those controls. Dynamic Tool auto-host configuration is refused in stable mode.
 
+For the exact 0.150.1 archive, the seal also requires the new experimental `thread/timeline/list`, `mcpServer/event/stream/start`, and `mcpServer/event/stream/stop` requests, plus the MCP event-stream and realtime item/transcript ServerNotifications. These less-common requests are callable through the schema-driven Official APIs drawer; their notifications enter the universal bounded observer without being misrepresented as ordinary chat content.
+
 ## Drift behavior
 
-Pinned stable and pinned experimental jobs are blocking archive checks. A latest-version job runs both modes as an advisory canary. New official ThreadItem or ServerRequest surface without a declared disposition makes the corresponding protocol seal fail instead of silently degrading.
+Pinned stable and pinned experimental jobs are blocking archive checks. A latest-version job runs both modes as an advisory canary. New official ThreadItem or ServerRequest surface without a declared disposition makes the corresponding protocol seal fail instead of silently degrading; all schema-admitted new ServerNotifications remain observable through the bounded universal fallback.
 
 ## Outside the parity boundary
 

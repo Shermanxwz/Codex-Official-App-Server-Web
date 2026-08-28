@@ -4,13 +4,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OfficialSchemaRegistry } from '../src/schema-registry.mjs';
 import {
-  SERVER_REQUEST_SUPPORT, THREAD_ITEM_TYPES, TIMELINE_DELTA_NOTIFICATIONS,
+  SERVER_NOTIFICATION_FALLBACK, SERVER_REQUEST_SUPPORT, THREAD_ITEM_TYPES, TIMELINE_DELTA_NOTIFICATIONS,
 } from '../public/protocol-support.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const codexBin = process.env.CWEB_CODEX_BIN || 'codex';
 const source = {
   app: fs.readFileSync(path.join(root, 'public/app.js'), 'utf8'),
+  events: fs.readFileSync(path.join(root, 'public/official-events.js'), 'utf8'),
+  index: fs.readFileSync(path.join(root, 'public/index.html'), 'utf8'),
   mcp: fs.readFileSync(path.join(root, 'public/mcp-app-host.js'), 'utf8'),
   server: fs.readFileSync(path.join(root, 'src/server.mjs'), 'utf8'),
 };
@@ -55,6 +57,11 @@ const callEvidence = [
 // `rpc('method', ...)` calls. Keep them in the same official-schema gate.
 const capabilityMethods = ['mcpServerStatus/list', 'skills/list', 'plugin/list', 'app/installed'];
 const capabilityEvidence = /const specs=\[\['mcpServerStatus\/list',mcpCapabilityGroup\],\['skills\/list',skillsCapabilityGroup\],\['plugin\/list',pluginCapabilityGroup\],\['app\/installed',appCapabilityGroup\]\]/;
+const genericDrawerEvidence = [
+  /function methodBucket\(\)\{return state\.methods\?\.\[\$\('methodKind'\)\.value\]\|\|\[\]\}/,
+  /if\(\$\('methodKind'\)\.value==='requests'\)r=await rpc\(item\.method,p\)/,
+  /else if\(\$\('methodKind'\)\.value==='notifications'\)r=await api\('\/api\/notify'/,
+];
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cweb-official-interface-audit-'));
 const errors = [];
@@ -62,6 +69,16 @@ try {
   const usedRequests = new Set([...literalMethods(source.app), ...literalMethods(source.mcp), ...capabilityMethods]);
   for (const [method, text, pattern] of callEvidence) if (!pattern.test(text)) errors.push(`missing call-site evidence: ${method}`);
   if (!capabilityEvidence.test(source.app)) errors.push('missing call-site evidence: capability inventory loop');
+  for (const pattern of genericDrawerEvidence) if (!pattern.test(source.app)) errors.push(`schema-driven Official APIs drawer evidence is missing: ${pattern}`);
+  if (SERVER_NOTIFICATION_FALLBACK !== 'official-event-log') errors.push('official ServerNotification fallback disposition is not sealed');
+  if (!/if\(e\.type==='notification'\)\{recordOfficialNotification\(e\.payload\);appendLive\(e\.payload\)\}/.test(source.app)) errors.push('official notifications are not recorded before specialized live handling');
+  if (!/if\(e\.type==='eventOversize'\)\{if\(e\.payload\?\.originalType==='notification'\)recordOfficialNotification/.test(source.app)) errors.push('transport-oversize official notifications are not represented in the event observer');
+  for (const needle of ['OFFICIAL_EVENT_LOG_LIMITS', 'maxEntries: 200', 'maxBytes: 1024 * 1024', 'maxEventBytes: 128 * 1024', 'appendOfficialEvent', 'transportOversize']) {
+    if (!source.events.includes(needle)) errors.push(`bounded official event fallback missing: ${needle}`);
+  }
+  for (const needle of ['id="officialEventLog"', 'id="officialEventCount"', 'id="officialEventRows"']) {
+    if (!source.index.includes(needle)) errors.push(`official event observer missing: ${needle}`);
+  }
   const allDeclaredDeltaNotifications = new Set(Object.keys(TIMELINE_DELTA_NOTIFICATIONS));
   const stableOptionalRequests = new Set(['thread/turns/list', 'thread/items/list', 'thread/searchOccurrences']);
   const stableOptionalServerRequests = new Set(['currentTime/read']);
@@ -116,4 +133,4 @@ if (errors.length) {
   console.error(errors.join('\n'));
   process.exit(1);
 }
-console.log(`OFFICIAL_INTERFACE_AUDIT_OK requests=${literalMethods(source.app).size + literalMethods(source.mcp).size} serverRequests=${Object.keys(SERVER_REQUEST_SUPPORT).length} deltaNotifications=${Object.keys(TIMELINE_DELTA_NOTIFICATIONS).length}`);
+console.log(`OFFICIAL_INTERFACE_AUDIT_OK requests=${literalMethods(source.app).size + literalMethods(source.mcp).size} serverRequests=${Object.keys(SERVER_REQUEST_SUPPORT).length} deltaNotifications=${Object.keys(TIMELINE_DELTA_NOTIFICATIONS).length} notificationFallback=${SERVER_NOTIFICATION_FALLBACK} schemaDrivenDrawer=true`);

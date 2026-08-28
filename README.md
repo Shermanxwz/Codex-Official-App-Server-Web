@@ -12,11 +12,11 @@ A self-hosted Web host for the **official OpenAI Codex App Server protocol**. Th
 - **Native server-request handling:** approvals, user input, MCP elicitation, permissions, Dynamic Tools and the experimental external clock request have explicit host dispositions. Platform-only auth-token refresh and attestation remain outside the browser trust boundary.
 - **MCP Apps Host:** advertises `io.modelcontextprotocol/ui` with `text/html;profile=mcp-app` and implements the stable `2026-01-26` host protocol using the mandatory double-iframe Web sandbox pattern.
 - **Dynamic Tool Host:** optional configured local process handlers are injected through official experimental `thread/start.dynamicTools` and are executed without a shell, with strict environment, time, request and output bounds. Unconfigured or unmatched dynamic calls receive the official `-32601` response and never become fake approval UI.
-- **Stable + experimental protocol seal:** CI regenerates both protocol modes and fails the pinned archive baseline if a ThreadItem or ServerRequest has no declared disposition.
+- **Stable + experimental protocol seal:** CI regenerates both protocol modes and fails the pinned archive baseline if a ThreadItem or ServerRequest has no declared disposition. Every schema-admitted ServerNotification is retained first in a bounded Official Events log, including notifications that do not belong in the conversation timeline.
 - **Zero runtime npm dependencies.** Node.js 22.12+ is required.
 - **No private ChatGPT backend, no Codex credential scraping, no direct `auth.json`/`config.toml` mutation, no Codex installer/upgrader, no process-wide kill.**
 
-The archive baseline is pinned to official `@openai/codex` **0.149.1**. If the goal is “seal it and do not maintain it”, keep that validated Codex version. The scheduled latest-version CI job is deliberately advisory: a future upstream protocol change can be detected, but no static third-party project can promise compatibility with every future unreleased Codex version without maintenance.
+The archive baseline is pinned to official `@openai/codex` **0.150.1** and was validated with a real authenticated model Turn plus persisted `thread/turns/list` and `thread/items/list` reads. If the goal is “seal it and do not maintain it”, keep that exact validated Codex version. The scheduled latest-version CI job is deliberately advisory: a future upstream protocol change can be detected, but no static third-party project can promise compatibility with every future unreleased Codex version without maintenance.
 
 See [Archive Contract](docs/ARCHIVE_CONTRACT.md), [Protocol Parity](docs/PROTOCOL_PARITY.md), and [Product Hosts](docs/HOSTS.md).
 
@@ -24,7 +24,7 @@ See [Archive Contract](docs/ARCHIVE_CONTRACT.md), [Protocol Parity](docs/PROTOCO
 
 | Area | Implemented behavior |
 | --- | --- |
-| Official protocol | Runtime-generated JSON Schema + TypeScript contract, Stable/Experimental negotiation, fail-closed method gate, all current official ThreadItem renderers, and an Official APIs drawer for less-common exported methods. |
+| Official protocol | Runtime-generated JSON Schema + TypeScript contract, Stable/Experimental negotiation, fail-closed method gate, all current official ThreadItem renderers, a bounded observer for every official ServerNotification, and an Official APIs drawer for less-common exported methods. |
 | Conversation UX | Thread list, new/read/list/resume flows, official rename/archive/unarchive/delete actions, model and reasoning controls, official image input, interrupt, live steer, context compaction, and official turn duration. |
 | Fast history | Quick view shows the 10 newest Turns. It first reads a lightweight official `itemsView: notLoaded` page, then automatically hydrates all 10 Turns—including conversation and work-process items—through official `thread/items/list` calls with bounded concurrency. If an advertised optional history method is rejected at runtime, the client trips a one-way compatibility fallback to stable `thread/read` and hides the unavailable paging controls. |
 | Complete history | Full-history mode follows official cursors page by page. Older Turns and their work process are hydrated per Turn only when visible or explicitly requested; the quick view never exposes an older-page control. |
@@ -116,7 +116,7 @@ For remote use, keep the service behind Tailscale, SSH tunneling, or an authenti
 | `CWEB_MCP_APPS` | `1` | advertise/render the stable MCP Apps extension |
 | `CWEB_MCP_APP_PERMISSIONS` | empty | optional requested-permission allow-list; browser secure-context/Permissions Policy rules still apply |
 | `CWEB_DYNAMIC_TOOLS_FILE` | empty | v1 Dynamic Tool Host JSON configuration; requires `CWEB_EXPERIMENTAL=1` |
-| `CWEB_NOTIFICATION_OPT_OUT` | `turn/diff/updated`, `turn/moderationMetadata` | additional App Server notification methods to suppress; transport diffs and moderation bookkeeping are always hidden from the conversation timeline |
+| `CWEB_NOTIFICATION_OPT_OUT` | empty | explicit App Server notification methods to suppress; by default all official notifications enter the bounded event observer, while transport diffs and moderation bookkeeping stay out of the conversation timeline |
 | `CWEB_STATE_DIR` | XDG state path | project schema/cache and Web write-control state; official threads remain owned by Codex Runtime |
 | `CWEB_SCHEMA_REFRESH` | `1` | regenerate official protocol exports at startup |
 
@@ -128,15 +128,17 @@ Detailed MCP App and Dynamic Tool contracts are in [docs/HOSTS.md](docs/HOSTS.md
 ./scripts/install-linux.sh
 ```
 
-The installer writes only project-owned XDG config/state plus two systemd user services. It reuses the existing official Codex executable for the separate App Server but does not install, upgrade, authenticate, or mutate Codex itself. When the invoking shell has explicit proxy variables, it preserves them in mode-`600` service environments so the official runtime can reach its upstream on networks that require a local proxy.
+The installer writes only project-owned XDG config/state plus two systemd user services. It reuses the existing official Codex executable for the separate App Server but does not install, upgrade, authenticate, or mutate Codex itself. Explicit proxy values update the mode-`600` service environments, explicitly empty values clear stale settings, and omitted values preserve the last working proxy configuration. The official App Server environment is rebuilt from a proxy-only allow-list and never receives the Web token or another `CWEB_*` setting.
 
 To pin the archive-validated runtime when more than one official Codex executable is installed, pass an explicit absolute path. This updates the existing Web runtime setting while preserving the access token and other operator settings:
 
 ```bash
-CODEX_BIN_OVERRIDE=/absolute/path/to/codex ./scripts/install-linux.sh
+CWEB_PUBLIC_ORIGIN=https://codex.example.com \
+CODEX_BIN_OVERRIDE=/absolute/path/to/codex \
+./scripts/install-linux.sh
 ```
 
-Without the override, the installer discovers `codex` on `PATH`; it never installs or upgrades Codex.
+`CWEB_PUBLIC_ORIGIN` is the canonical public origin with no trailing slash; providing it makes login cookies `Secure` on HTTPS and pins write-origin checks instead of relying on a forwarded Host header. Without the runtime override, the installer discovers `codex` on `PATH`; it never installs or upgrades Codex.
 
 ## Reproducible seal
 
@@ -146,6 +148,8 @@ npm run manifest:verify
 npm test
 npm run check
 npm run audit:official
+npm run smoke:runtime
+npm run smoke:gateway
 npm run seal:core
 npm run seal
 ```
@@ -158,7 +162,9 @@ CI includes:
 - pinned experimental official protocol seal;
 - latest official stable+experimental advisory seal.
 
-`npm run seal` additionally launches the real official App Server on the target host and verifies exported official RPCs. A real authenticated model turn still requires valid user credentials on that target machine; tests never fake that claim.
+`npm run smoke:runtime` launches the exact selected official App Server binary and verifies account/model RPCs plus the paginated-thread lifecycle. Set `CWEB_RUNTIME_SMOKE_MODEL_TURN=1` for the deployment-host proof that also runs a real model Turn, reads its persisted Turn/items, verifies a unique assistant sentinel, and deletes the test thread. `npm run seal` verifies the remaining exported official RPC surface. Tests never fake an authenticated model-Turn claim.
+
+`npm run smoke:gateway` repeats that proof through the deployed HTTP/SSE gateway. With `CWEB_GATEWAY_URL`, `CWEB_GATEWAY_ORIGIN`, `CWEB_GATEWAY_TOKEN`, and `CWEB_GATEWAY_MODEL_TURN=1`, it additionally validates login-cookie attributes, wrong-origin rejection, SSE connected/heartbeat delivery, Cloudflare presence when remote, persisted history, test-thread cleanup, and logout without printing the token or session cookie.
 
 ## Relationship to OpenAI
 

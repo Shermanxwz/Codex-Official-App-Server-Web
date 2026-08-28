@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 env:
-  CODEX_VALIDATED_VERSION: '0.149.1'
+  CODEX_VALIDATED_VERSION: '0.150.1'
 
 jobs:
   test:

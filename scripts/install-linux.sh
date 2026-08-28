@@ -40,6 +40,36 @@ quote_env() {
   printf '"%s"' "$value"
 }
 
+upsert_env() {
+  local name="$1" value="$2"
+  ENV_FILE="$ENV_FILE" ENV_NAME="$name" ENV_VALUE="$value" "$NODE_BIN" <<'NODE'
+const fs=require('node:fs');
+const file=process.env.ENV_FILE, name=process.env.ENV_NAME, value=JSON.stringify(process.env.ENV_VALUE);
+if(!/^CWEB_[A-Z0-9_]+$/.test(name))throw new Error('Refusing invalid service environment key');
+const lines=fs.readFileSync(file,'utf8').split(/\n/);
+while(lines.length&&lines.at(-1)==='')lines.pop();
+let replaced=false;
+const next=lines.map(line=>{
+  if(!line.startsWith(`${name}=`))return line;
+  if(replaced)return null;
+  replaced=true;
+  return `${name}=${value}`;
+}).filter(line=>line!==null);
+if(!replaced)next.push(`${name}=${value}`);
+const temporary=`${file}.tmp-${process.pid}`;
+fs.writeFileSync(temporary,`${next.join('\n')}\n`,{mode:0o600});
+fs.renameSync(temporary,file);
+fs.chmodSync(file,0o600);
+NODE
+}
+
+if [[ -n "${CWEB_PUBLIC_ORIGIN:-}" ]]; then
+  "$NODE_BIN" -e 'const value=process.argv[1];let parsed;try{parsed=new URL(value)}catch{}if(!parsed||value!==parsed.origin||!["http:","https:"].includes(parsed.protocol)||parsed.username||parsed.password)process.exit(1)' "$CWEB_PUBLIC_ORIGIN" || {
+    echo "CWEB_PUBLIC_ORIGIN must be a canonical exact origin such as https://codex.example.com" >&2
+    exit 1
+  }
+fi
+
 umask 077
 mkdir -p "$CONFIG_DIR" "$STATE_DIR" "$SERVICE_DIR"
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -54,6 +84,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
     printf 'CWEB_CODEX_TRANSPORT=websocket\n'
     printf 'CWEB_CODEX_SERVER_URL=ws://127.0.0.1:43999\n'
     printf 'CWEB_EXPERIMENTAL=1\n'
+    if [[ -n "${CWEB_PUBLIC_ORIGIN:-}" ]]; then printf 'CWEB_PUBLIC_ORIGIN=%s\n' "$(quote_env "$CWEB_PUBLIC_ORIGIN")"; fi
     printf 'CWEB_STATE_DIR=%s\n' "$(quote_env "$STATE_DIR")"
     printf 'CWEB_CONFIG_DIR=%s\n' "$(quote_env "$CONFIG_DIR")"
   } > "$ENV_FILE"
@@ -61,25 +92,12 @@ if [[ ! -f "$ENV_FILE" ]]; then
   echo "Generated a private access token in $ENV_FILE (mode 600); do not copy it into logs or shell history."
 else
   chmod 600 "$ENV_FILE"
-  if [[ -n "${CODEX_BIN_OVERRIDE:-}" ]] && grep -q '^CWEB_CODEX_BIN=' "$ENV_FILE"; then
-    ENV_FILE="$ENV_FILE" CODEX_BIN="$CODEX_BIN" "$NODE_BIN" <<'NODE'
-const fs=require('node:fs');
-const file=process.env.ENV_FILE;
-const value=JSON.stringify(process.env.CODEX_BIN);
-const lines=fs.readFileSync(file,'utf8').split(/\n/);
-let replaced=false;
-const next=lines.map(line=>{
-  if(!line.startsWith('CWEB_CODEX_BIN='))return line;
-  if(replaced)return null;
-  replaced=true;
-  return `CWEB_CODEX_BIN=${value}`;
-}).filter(line=>line!==null);
-if(!replaced)next.push(`CWEB_CODEX_BIN=${value}`);
-fs.writeFileSync(file,next.join('\n'),{mode:0o600});
-NODE
+  if [[ -n "${CODEX_BIN_OVERRIDE:-}" ]]; then
+    upsert_env CWEB_CODEX_BIN "$CODEX_BIN"
   elif ! grep -q '^CWEB_CODEX_BIN=' "$ENV_FILE"; then
     printf 'CWEB_CODEX_BIN=%s\n' "$(quote_env "$CODEX_BIN")" >> "$ENV_FILE"
   fi
+  if [[ -n "${CWEB_PUBLIC_ORIGIN:-}" ]]; then upsert_env CWEB_PUBLIC_ORIGIN "$CWEB_PUBLIC_ORIGIN"; fi
   if ! grep -q '^CWEB_CODEX_TRANSPORT=' "$ENV_FILE"; then
     printf 'CWEB_CODEX_TRANSPORT=websocket\n' >> "$ENV_FILE"
   fi
@@ -107,32 +125,17 @@ NODE
   fi
   echo "Keeping existing $ENV_FILE"
 fi
-# A user systemd manager does not necessarily inherit the desktop shell's
-# proxy environment. Preserve explicitly configured proxy variables in the
-# private service environment so the official Codex runtime can reach its
-# upstream endpoint on machines that require a local proxy.
-for proxy_name in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy; do
-  proxy_value="${!proxy_name-}"
-  if [[ -n "$proxy_value" ]] && ! grep -q "^${proxy_name}=" "$ENV_FILE"; then
-    printf '%s=%s\n' "$proxy_name" "$(quote_env "$proxy_value")" >> "$ENV_FILE"
-  fi
-done
-chmod 600 "$ENV_FILE"
-
 # The official App Server is deliberately a separate, project-supervised
 # process. It receives only the network variables needed by the installed
 # Codex runtime; the Web session token and all CWEB_* settings stay private to
 # the gateway. Keeping this process alive is what lets a gateway restart
 # reconnect to an in-flight official Turn instead of terminating it.
-{
-  for proxy_name in HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY http_proxy https_proxy all_proxy no_proxy; do
-    proxy_value="${!proxy_name-}"
-    if [[ -n "$proxy_value" ]]; then
-      printf '%s=%s\n' "$proxy_name" "$(quote_env "$proxy_value")"
-    fi
-  done
-} > "$OFFICIAL_ENV_FILE"
-chmod 600 "$OFFICIAL_ENV_FILE"
+# A user systemd manager does not necessarily inherit the invoking shell's
+# proxy environment. Explicit current values replace older ones; absent values
+# preserve the last known service configuration. The official environment is
+# rebuilt from the proxy allow-list only, so CWEB_TOKEN and other gateway
+# settings can never cross this boundary.
+"$NODE_BIN" "$ROOT/scripts/proxy-env.mjs" "$ENV_FILE" "$OFFICIAL_ENV_FILE"
 
 CODEX_SERVER_URL="$(sed -n 's/^CWEB_CODEX_SERVER_URL=//p' "$ENV_FILE" | head -n 1)"
 CODEX_SERVER_URL="${CODEX_SERVER_URL#\"}"

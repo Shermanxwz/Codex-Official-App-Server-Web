@@ -71,6 +71,19 @@ export function sameOrigin(req, publicOrigin = '') {
   return origin === `http://${host}` || origin === `https://${host}`;
 }
 
+export function canonicalExactOrigin(value) {
+  const text = String(value || '');
+  if (!text) return '';
+  let parsed;
+  try { parsed = new URL(text); } catch { return ''; }
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) return '';
+  // URL.origin removes a trailing slash, normalizes host casing/default ports,
+  // and is exactly the value browsers send in the Origin header. Reject
+  // non-canonical spellings instead of accepting a setting that can never
+  // match and can silently omit Secure cookies.
+  return text === parsed.origin ? parsed.origin : '';
+}
+
 export function safeEqualText(a, b) {
   const left = Buffer.from(String(a));
   const right = Buffer.from(String(b));

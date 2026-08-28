@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   MANUAL_SERVER_REQUESTS, NATIVE_SERVER_REQUESTS, PLATFORM_ONLY_SERVER_REQUESTS,
-  SERVER_REQUEST_SUPPORT, THREAD_ITEM_TYPES, protocolSupportSummary,
+  SERVER_NOTIFICATION_FALLBACK, SERVER_REQUEST_SUPPORT, THREAD_ITEM_TYPES, protocolSupportSummary,
 } from '../public/protocol-support.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -254,6 +254,8 @@ test('published support summary advertises only implemented archive hosts', () =
   assert.equal(summary.mcpAppsHost, true);
   assert.equal(summary.dynamicToolHost, true);
   assert.equal(summary.currentTimeHost, true);
+  assert.equal(SERVER_NOTIFICATION_FALLBACK, 'official-event-log');
+  assert.equal(summary.serverNotificationFallback, 'official-event-log');
   assert.equal(summary.experimentalProtocolSeal, true);
 });
 
@@ -275,9 +277,9 @@ test('runtime server advertises the implemented MCP Apps profile and gates Dynam
   assert.match(server, /function rejectDynamicToolRequest/);
   assert.match(server, /dynamic-tool-host-unconfigured/);
   assert.match(server, /if \(configured\) pushEvent\('serverRequestUnsupported'/);
-  assert.match(server, /HUMAN_IGNORED_NOTIFICATION_METHODS/);
-  assert.match(server, /turn\/diff\/updated.*turn\/moderationMetadata/);
-  assert.match(config, /\['turn\/diff\/updated', 'turn\/moderationMetadata', \.\.\.list\('CWEB_NOTIFICATION_OPT_OUT'\)\]/);
+  assert.doesNotMatch(server, /HUMAN_IGNORED_NOTIFICATION_METHODS/);
+  assert.match(config, /notificationOptOut:\s*list\('CWEB_NOTIFICATION_OPT_OUT'\)/);
+  assert.match(config, /Receive every official notification by default/);
   assert.match(server, /function compactRpcError/);
   assert.match(server, /function jsonObjectBody/);
   assert.match(server, /function methodEnvelope/);

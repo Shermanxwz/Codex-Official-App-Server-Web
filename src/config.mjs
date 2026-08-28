@@ -53,10 +53,10 @@ export const config = Object.freeze({
   publicOrigin: process.env.CWEB_PUBLIC_ORIGIN || '',
   token: process.env.CWEB_TOKEN || '',
   accessProfile: choice('CWEB_ACCESS_PROFILE', 'full', ['read', 'coding', 'admin', 'full']),
-  // Aggregate diffs and moderation bookkeeping are official transport events,
-  // not human-facing conversation content. Suppress them at the handshake;
-  // the browser still keeps a defensive presentation-layer filter.
-  notificationOptOut: [...new Set(['turn/diff/updated', 'turn/moderationMetadata', ...list('CWEB_NOTIFICATION_OPT_OUT')])],
+  // Receive every official notification by default. The browser keeps
+  // transport-only events out of the conversation while retaining them in its
+  // bounded Official Events observer. Operators may still opt out explicitly.
+  notificationOptOut: list('CWEB_NOTIFICATION_OPT_OUT'),
   mcpAppsEnabled: bool('CWEB_MCP_APPS', true),
   mcpAppPermissions: allowedList('CWEB_MCP_APP_PERMISSIONS', ['camera', 'microphone', 'geolocation', 'clipboardWrite']),
   dynamicToolsFile: process.env.CWEB_DYNAMIC_TOOLS_FILE ? path.resolve(process.env.CWEB_DYNAMIC_TOOLS_FILE) : '',

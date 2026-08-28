@@ -41,3 +41,5 @@ Platform-only `account/chatgptAuthTokens/refresh` and `attestation/generate` are
 ## Resource bounds
 
 Pending RPCs/ServerRequests, App Server stdin, JSONL records, HTTP bodies, SSE slow-client buffers, event frames, sessions, rate-limit keys, MCP App messages/resources/inventories, and Dynamic Tool runtime/output are bounded.
+
+The browser's Official Events observer is separately bounded to 200 entries and 1 MiB. An individual official notification above 128 KiB retains only method identity and payload byte size. This prevents a high-volume or oversized official event from becoming an unbounded page-memory sink.

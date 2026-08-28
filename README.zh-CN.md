@@ -12,11 +12,11 @@
 - **ServerRequest 有明确宿主处置：**审批、用户输入、MCP elicitation、权限、Dynamic Tool，以及 experimental 外部时钟请求都进入明确 Host 流程；平台专属 token refresh / attestation 不进入浏览器信任边界。
 - **MCP Apps Host：**正式声明 `io.modelcontextprotocol/ui` + `text/html;profile=mcp-app`，实现稳定 `2026-01-26` Host 协议，并按规范使用 Web 必须的双 iframe sandbox。
 - **Dynamic Tool 自动 Host：**可选本机 process handler 通过官方 experimental `thread/start.dynamicTools` 自动注入；执行不经过 shell，并限制环境变量、超时、请求与输出大小。未配置或未匹配的 Dynamic Tool 由官方协议返回 `-32601`，不会伪造审批 UI。
-- **Stable + Experimental 双协议封存：**CI 同时重新生成两套官方协议；Pinned 基线里只要新增 ThreadItem / ServerRequest 没有明确处置就直接失败。
+- **Stable + Experimental 双协议封存：**CI 同时重新生成两套官方协议；Pinned 基线里只要新增 ThreadItem / ServerRequest 没有明确处置就直接失败。每个 schema 允许的 ServerNotification 都会先进入有界“官方事件”日志，包括不适合进入对话时间线的通知。
 - **运行时 npm 依赖为 0。**要求 Node.js 22.12+。
 - **不接私有 ChatGPT backend，不抓 Codex 凭据，不直接修改 `auth.json` / `config.toml`，不安装/升级 Codex，不做 process-wide kill。**
 
-封存基线固定为官方 `@openai/codex` **0.149.1**。如果目标是“封存后不再维护”，就固定运行这个已验证版本。CI 仍会用 `@latest` 做 advisory canary；未来官方若改变协议，项目会检测出来，但任何静态第三方项目都不能诚实承诺对所有未来未发布版本永远无需维护。
+封存基线固定为官方 `@openai/codex` **0.150.1**，并已用真实登录账号完成模型 Turn、持久化 `thread/turns/list` 与 `thread/items/list` 读取验证。如果目标是“封存后不再维护”，就固定运行这个精确版本。CI 仍会用 `@latest` 做 advisory canary；未来官方若改变协议，项目会检测出来，但任何静态第三方项目都不能诚实承诺对所有未来未发布版本永远无需维护。
 
 精确边界见 [封存契约](docs/ARCHIVE_CONTRACT.md)、[协议一致性](docs/PROTOCOL_PARITY.md)、[产品级 Host](docs/HOSTS.md)。
 
@@ -24,7 +24,7 @@
 
 | 领域 | 已实现能力 |
 | --- | --- |
-| 官方协议 | 启动时从官方 Codex 二进制生成 JSON Schema 与 TypeScript 契约，支持 Stable/Experimental 协商，schema gate 失败即关闭；覆盖当前官方 ThreadItem，并提供“官方接口”面板调用其余导出方法。 |
+| 官方协议 | 启动时从官方 Codex 二进制生成 JSON Schema 与 TypeScript 契约，支持 Stable/Experimental 协商，schema gate 失败即关闭；覆盖当前官方 ThreadItem，为每个官方 ServerNotification 提供有界观察日志，并提供“官方接口”面板调用其余导出方法。 |
 | 会话体验 | 会话列表、新建/读取/列表/恢复，官方重命名/归档/取消归档/删除，模型与推理强度，官方图片输入，停止任务，实时调整方向，上下文压缩，以及官方 Turn 耗时。 |
 | 快速会话 | 快速会话显示最近 10 条 Turn；先用官方 `itemsView: notLoaded` 读取轻量结构，再通过官方 `thread/items/list`、有界并发自动补齐这 10 条的会话内容和工作过程。如果运行时拒绝了已声明的可选历史接口，网页会触发一次性兼容回退，改用稳定的 `thread/read`，并隐藏不可用的分页控件。 |
 | 历史完整会话 | 只有历史完整会话会沿官方游标逐页读取更早内容；更早 Turn 的会话内容和工作过程按 Turn、按可视区或明确操作懒加载，快速会话不显示更早分页按钮。 |
@@ -116,7 +116,7 @@ npm start
 | `CWEB_MCP_APPS` | `1` | 声明并渲染稳定 MCP Apps 扩展 |
 | `CWEB_MCP_APP_PERMISSIONS` | 空 | 可选权限 allow-list；最终仍受浏览器 secure-context / Permissions Policy 约束 |
 | `CWEB_DYNAMIC_TOOLS_FILE` | 空 | Dynamic Tool Host v1 JSON；要求 `CWEB_EXPERIMENTAL=1` |
-| `CWEB_NOTIFICATION_OPT_OUT` | `turn/diff/updated`, `turn/moderationMetadata` | 额外要抑制的 notification；聚合 Diff 和 moderation bookkeeping 始终不进入对话时间线 |
+| `CWEB_NOTIFICATION_OPT_OUT` | 空 | 明确要抑制的 App Server notification；默认所有官方通知都进入有界事件观察器，而聚合 Diff 和 moderation bookkeeping 仍不会进入对话时间线 |
 | `CWEB_STATE_DIR` | XDG state | 项目 schema/cache 与网页写入控制状态；官方会话仍由 Codex Runtime 管理 |
 | `CWEB_SCHEMA_REFRESH` | `1` | 启动时重新生成官方协议 |
 
@@ -128,15 +128,17 @@ MCP Apps 和 Dynamic Tool 的详细契约见 [docs/HOSTS.md](docs/HOSTS.md)。
 ./scripts/install-linux.sh
 ```
 
-安装器只写项目自己的 XDG config/state 与两个 systemd user service；会复用现有官方 Codex 可执行文件启动独立 App Server，但不会安装、升级、登录或直接修改 Codex。
+安装器只写项目自己的 XDG config/state 与两个 systemd user service；会复用现有官方 Codex 可执行文件启动独立 App Server，但不会安装、升级、登录或直接修改 Codex。当前终端显式提供的代理值会更新 mode-`600` 服务环境，显式空值会清除旧设置，未提供时保留上次可用值。官方 App Server 环境只从代理白名单重建，绝不会接收 Web token 或其他 `CWEB_*` 配置。
 
 如果机器上同时存在多个官方 Codex 可执行文件，可用绝对路径固定封存基线运行时。这个参数会更新已有 Web 运行时配置，同时保留访问令牌和其他运维设置：
 
 ```bash
-CODEX_BIN_OVERRIDE=/absolute/path/to/codex ./scripts/install-linux.sh
+CWEB_PUBLIC_ORIGIN=https://codex.example.com \
+CODEX_BIN_OVERRIDE=/absolute/path/to/codex \
+./scripts/install-linux.sh
 ```
 
-不传 override 时，安装器从 `PATH` 查找 `codex`；它不会安装或升级 Codex。
+`CWEB_PUBLIC_ORIGIN` 必须是末尾不带 `/` 的规范公网 Origin；设置后，HTTPS 登录 Cookie 会带 `Secure`，写入校验也会固定到该 Origin，不再依赖转发的 Host。未传运行时 override 时，安装器从 `PATH` 查找 `codex`；它不会安装或升级 Codex。
 
 ## 封存检查
 
@@ -146,13 +148,17 @@ npm run manifest:verify
 npm test
 npm run check
 npm run audit:official
+npm run smoke:runtime
+npm run smoke:gateway
 npm run seal:core
 npm run seal
 ```
 
 CI 包括：完整测试/静态检查、Stable/Experimental 官方接口审计、Pinned Stable 官方协议封存、Pinned Experimental 官方协议封存、Latest Stable+Experimental advisory canary。
 
-`npm run seal` 还会在目标主机启动真实官方 App Server 并调用官方导出 RPC。真正带用户账号的模型 turn 仍需要目标机存在有效官方登录凭据；测试不会把没有执行过的真实账号 E2E 冒充成已验证。
+`npm run smoke:runtime` 会启动所选的精确官方 App Server 二进制，验证账号/模型 RPC 与分页会话生命周期；在部署主机设置 `CWEB_RUNTIME_SMOKE_MODEL_TURN=1` 后，还会执行真实模型 Turn、读取持久化 Turn/items、核对唯一助手标记并删除测试会话。`npm run seal` 验证其余官方 RPC 面。测试不会把未执行的真实账号 E2E 冒充成已验证。
+
+`npm run smoke:gateway` 会通过已经部署的 HTTP/SSE 网关重复同一证明。配置 `CWEB_GATEWAY_URL`、`CWEB_GATEWAY_ORIGIN`、`CWEB_GATEWAY_TOKEN` 与 `CWEB_GATEWAY_MODEL_TURN=1` 后，它还会检查登录 Cookie 属性、错误 Origin 拒绝、SSE connected/heartbeat、远程部署时的 Cloudflare、持久化历史、测试会话清理与退出，且不会打印 token 或 session cookie。
 
 ## 与 OpenAI 的关系
 

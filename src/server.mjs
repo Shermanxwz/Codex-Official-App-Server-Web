@@ -9,7 +9,7 @@ import { DynamicToolHost } from './dynamic-tool-host.mjs';
 import { OfficialSchemaRegistry } from './schema-registry.mjs';
 import { pruneStateArtifacts } from './state-maintenance.mjs';
 import {
-  SessionStore, SlidingRateLimit, isLoopbackHost, json, parseCookies,
+  SessionStore, SlidingRateLimit, canonicalExactOrigin, isLoopbackHost, json, parseCookies,
   readJson, safeEqualText, sameOrigin, secureHeaders,
 } from './security.mjs';
 import { PLATFORM_ONLY_SERVER_REQUESTS, protocolSupportSummary } from '../public/protocol-support.js';
@@ -66,9 +66,7 @@ if (config.dynamicToolsFile && !config.experimental) {
   process.exit(2);
 }
 if (config.publicOrigin) {
-  let parsed;
-  try { parsed = new URL(config.publicOrigin); } catch { parsed = null; }
-  if (!parsed || !['http:', 'https:'].includes(parsed.protocol) || parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password) {
+  if (canonicalExactOrigin(config.publicOrigin) !== config.publicOrigin) {
     console.error('CWEB_PUBLIC_ORIGIN must be an exact http(s) origin with no path, query, fragment, or credentials.');
     process.exit(2);
   }
@@ -125,11 +123,6 @@ const clientCapabilities = {
   ...(config.notificationOptOut.length ? { optOutNotificationMethods: config.notificationOptOut } : {}),
 };
 
-// These notifications are useful to protocol clients but are never useful
-// conversation content. Filter them before schema mismatch reporting so an
-// older pinned schema cannot turn harmless upstream bookkeeping into UI noise.
-const HUMAN_IGNORED_NOTIFICATION_METHODS = new Set(['turn/diff/updated', 'turn/moderationMetadata']);
-
 const codex = new CodexAppServer({
   codexBin: config.codexBin, cwd: config.workspace, experimental: config.experimental,
   transport: config.codexTransport, serverUrl: config.codexServerUrl,
@@ -153,6 +146,14 @@ const sseClients = new Map();
 // edits Codex history and expires well before a normal browser session.
 const TURN_START_DEDUPE_TTL_MS = 10 * 60 * 1000;
 const TURN_START_DEDUPE_MAX = 1024;
+// No individual SSE frame may consume the entire per-client backpressure
+// budget. Oversized official events are represented by compact metadata and
+// recovered through authoritative reads.
+const SSE_FRAME_SAFETY_MARGIN = 1024;
+const sseEventMaxBytes = Math.max(1024, Math.min(
+  config.eventMaxBytes,
+  config.sseMaxBufferBytes - SSE_FRAME_SAFETY_MARGIN,
+));
 const turnStartDedupe = new Map();
 // `turn/plan/updated` is an event snapshot, not a persisted Turn item. Keep
 // only the currently active snapshots so a fresh Web tab can reconstruct the
@@ -319,8 +320,9 @@ function isActiveWriterRpcError(error) {
 function eventFrame(type, payload) {
   const event = { type, payload, at: Date.now(), sequence: ++eventSequence };
   const text = JSON.stringify(event);
-  if (Buffer.byteLength(text) <= config.eventMaxBytes) return { event, frame: `id: ${event.sequence}\ndata: ${text}\n\n` };
-  const compact = { type: 'eventOversize', payload: { originalType: type, method: payload?.method || null, bytes: Buffer.byteLength(text) }, at: Date.now(), sequence: event.sequence };
+  const bytes = Buffer.byteLength(text);
+  if (bytes <= sseEventMaxBytes) return { event, frame: `id: ${event.sequence}\ndata: ${text}\n\n` };
+  const compact = { type: 'eventOversize', payload: { originalType: type, method: payload?.method || null, bytes }, at: Date.now(), sequence: event.sequence };
   return { event: compact, frame: `id: ${compact.sequence}\ndata: ${JSON.stringify(compact)}\n\n` };
 }
 
@@ -366,6 +368,7 @@ function writeSse(res, frame) {
   const client = sseClients.get(res);
   if (!client || res.destroyed || res.writableEnded) return failSseClient(res);
   const bytes = Buffer.byteLength(frame);
+  if (bytes > config.sseMaxBufferBytes) return failSseClient(res);
   if (client.blocked || res.writableNeedDrain || res.writableLength > config.sseMaxBufferBytes) {
     if (client.queuedBytes + bytes > config.sseMaxBufferBytes) return failSseClient(res);
     client.queue.push(frame);
@@ -455,7 +458,7 @@ codex.on('serverRequest', (message) => {
   void autoHandleServerRequest(message).then((handled) => {
     if (handled) return;
     const bytes = Buffer.byteLength(JSON.stringify(message));
-    if (bytes > config.eventMaxBytes) {
+    if (bytes > sseEventMaxBytes) {
       try { codex.respondError(message.id, { code: -32602, message: `Server request exceeds Web client safety limit (${bytes} bytes)` }); } catch { /* ignore */ }
       pushEvent('serverRequestRejected', { method: message.method, reason: 'too-large', bytes });
       return;
@@ -468,7 +471,6 @@ codex.on('serverRequest', (message) => {
 });
 
 codex.on('notification', (message) => {
-  if (HUMAN_IGNORED_NOTIFICATION_METHODS.has(message.method)) return;
   if (!registry.getServerNotification(message.method)) {
     pushEvent('protocolMismatch', { direction: 'serverNotification', method: message.method });
     return;

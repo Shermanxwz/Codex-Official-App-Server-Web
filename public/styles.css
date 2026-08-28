@@ -57,7 +57,7 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
 @container (max-width:620px){.method-item-description{max-width:58vw}.method-heading-copy h3{font-size:15px}.activity-facts{grid-template-columns:1fr 1fr}}
 @media(max-width:480px){.activity-subtitle{max-width:58vw}.activity-facts{grid-template-columns:1fr}.method-item-description{max-width:52vw}}
 .method-heading-copy h3{margin:0;font-family:inherit;font-size:16px;font-weight:650;line-height:1.25;letter-spacing:-.02em}
-.drawer{grid-template-rows:auto auto auto minmax(0,1fr)}
+.drawer{grid-template-rows:auto auto auto auto minmax(0,1fr)}
 .capability-summary{padding:10px 12px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--soft) 46%,transparent)}.capability-summary-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.capability-summary-head>div{display:flex;flex-direction:column;gap:2px;min-width:0}.capability-summary-head strong{font-size:11px}.capability-summary-head small{color:var(--muted);font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.capability-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:8px}.capability-card{min-width:0;display:flex;flex-direction:column;gap:2px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}.capability-card-label{color:var(--muted);font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.capability-card-value{font-size:16px;line-height:1.15}.capability-card-detail{min-height:13px;color:var(--faint);font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.capability-state{font-size:8px;font-weight:650}.capability-state.ready{color:var(--ok)}.capability-state.unavailable{color:var(--bad)}
 .capability-loading{grid-column:1/-1;padding:8px 2px;color:var(--muted);font-size:9px}
 @container (max-width:620px){.capability-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -84,6 +84,22 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
 .capability-technical>summary::before,.capability-group-technical>summary::before{content:'›';display:inline-block;margin-right:4px;transition:transform .15s ease}
 .capability-technical[open]>summary::before,.capability-group-technical[open]>summary::before{transform:rotate(90deg)}
 .capability-technical code,.capability-group-technical code{display:block;padding:5px 0 2px;color:var(--muted);font:8px/1.4 ui-monospace,monospace;overflow-wrap:anywhere}
+.official-event-log{border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--soft) 28%,transparent)}
+.official-event-log>summary{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;cursor:pointer;list-style:none;color:var(--muted);font-size:10px;font-weight:650}
+.official-event-log>summary::-webkit-details-marker{display:none}
+.official-event-log>summary::before{content:'›';margin-right:2px;transition:transform .15s ease}
+.official-event-log[open]>summary::before{transform:rotate(90deg)}
+.official-event-log>summary>span:first-of-type{flex:1}
+.official-event-count{min-width:22px;padding:1px 6px;border-radius:999px;background:var(--panel);border:1px solid var(--line);text-align:center;font:8px ui-monospace,monospace}
+.official-event-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 12px;border-top:1px solid var(--line)}
+.official-event-head small{color:var(--faint);font-size:8.5px;line-height:1.35}
+.official-event-rows{max-height:220px;overflow:auto;padding:0 12px 9px}
+.official-event-row{border:1px solid var(--line);border-radius:8px;background:var(--panel);overflow:hidden;margin-top:6px}
+.official-event-row>summary{display:flex;align-items:center;gap:7px;cursor:pointer;list-style:none;padding:7px 8px;font-size:9px}
+.official-event-row>summary::-webkit-details-marker{display:none}
+.official-event-method{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:9px ui-monospace,monospace}
+.official-event-time,.official-event-truncated{color:var(--faint);font-size:8px;white-space:nowrap}
+.official-event-row pre{margin:0;max-height:260px;overflow:auto;padding:8px;border-top:1px solid var(--line);background:var(--soft);white-space:pre-wrap;word-break:break-word;font:9px/1.45 ui-monospace,monospace}
 .composer-hint-secondary{color:var(--muted)}
 .composer-sync-status{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ok);font-size:8px}
 .composer-sync-status[data-state="configSyncing"]{color:var(--muted)}

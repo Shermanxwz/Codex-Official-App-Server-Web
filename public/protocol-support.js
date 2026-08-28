@@ -38,6 +38,13 @@ export const TIMELINE_DELTA_NOTIFICATIONS = Object.freeze({
   'turn/plan/updated': 'ignore',
 });
 
+// Every schema-admitted ServerNotification is recorded in the bounded
+// Official Events log before any specialized conversation/state handler runs.
+// This universal disposition keeps process, realtime, MCP event-stream and
+// future schema-known notifications observable without pretending they are
+// ordinary conversation items.
+export const SERVER_NOTIFICATION_FALLBACK = 'official-event-log';
+
 export function serverRequestSupport(method) { return SERVER_REQUEST_SUPPORT[String(method || '')] || 'unknown'; }
 
 export function protocolSupportSummary() {
@@ -52,6 +59,7 @@ export function protocolSupportSummary() {
     mcpAppsHost: true,
     dynamicToolHost: true,
     currentTimeHost: true,
+    serverNotificationFallback: SERVER_NOTIFICATION_FALLBACK,
     experimentalProtocolSeal: true,
     openaiForm: true,
   };
