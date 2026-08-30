@@ -419,3 +419,10 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
     z-index:60;
   }
 }
+
+/* The product mark is a real home affordance on both desktop and mobile. */
+.brand.home-button{appearance:none;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;border-radius:9px;padding:4px 6px;margin:-4px -6px}
+.brand.home-button:hover,.brand.home-button:focus-visible{background:var(--hover);outline:none}
+#homeButtonTop{font-size:18px;line-height:1}
+[data-autonomous="on"] #autonomousToggle{background:color-mix(in srgb,var(--ok) 8%,transparent)}
+#autonomousNote{max-width:100%;overflow-wrap:anywhere}

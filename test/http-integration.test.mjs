@@ -141,6 +141,32 @@ if(args[0]==='app-server'){
 process.exit(2);
 `,{mode:0o755}); return file;
 }
+function fakeAutonomousCodex(dir){
+  const file=path.join(dir,'codex');
+  fs.writeFileSync(file,`#!/usr/bin/env node
+const fs=require('node:fs'),path=require('node:path'),readline=require('node:readline');
+const args=process.argv.slice(2),logFile=${JSON.stringify(path.join(dir,'rpc-log.jsonl'))};
+if(args[0]==='--version'){console.log('codex-cli 9.9.9-autonomous-test');process.exit(0)}
+if(args[0]==='app-server'&&args[1]==='generate-json-schema'){
+ const out=args[args.indexOf('--out')+1];fs.mkdirSync(out,{recursive:true});
+ const variant=(method,ref)=>({title:method,properties:{id:{},method:{enum:[method]},params:{$ref:'#/definitions/'+ref}},required:['id','method','params']});
+ const fields=(names)=>Object.fromEntries(names.map(name=>[name,{}]));
+ const req={definitions:{InitializeParams:{type:'object'},ThreadStartParams:{type:'object',properties:fields(['threadId','cwd','approvalPolicy','sandbox','permissions'])},ThreadResumeParams:{type:'object',properties:fields(['threadId','approvalPolicy','sandbox','permissions'])},ThreadSettingsUpdateParams:{type:'object',properties:fields(['threadId','approvalPolicy','sandboxPolicy','permissions'])},TurnStartParams:{type:'object',properties:fields(['threadId','input','approvalPolicy','sandboxPolicy','permissions'])},CommandExecParams:{type:'object',properties:fields(['command','sandboxPolicy','permissionProfile'])}},oneOf:[variant('initialize','InitializeParams'),variant('thread/start','ThreadStartParams'),variant('thread/resume','ThreadResumeParams'),variant('thread/settings/update','ThreadSettingsUpdateParams'),variant('turn/start','TurnStartParams'),variant('command/exec','CommandExecParams')]};
+ const empty={definitions:{},oneOf:[]};
+ for(const [name,data] of [['ClientRequest.json',req],['ClientNotification.json',empty],['ServerRequest.json',empty],['ServerNotification.json',empty]])fs.writeFileSync(path.join(out,name),JSON.stringify(data));process.exit(0);
+}
+if(args[0]==='app-server'&&args[1]==='generate-ts'){
+ const out=args[args.indexOf('--out')+1];fs.mkdirSync(out,{recursive:true});
+ fs.writeFileSync(path.join(out,'ClientRequest.ts'),'export type ClientRequest={"method":"initialize"}|{"method":"thread/start"}|{"method":"thread/resume"}|{"method":"thread/settings/update"}|{"method":"turn/start"}|{"method":"command/exec"};');
+ for(const name of ['ClientNotification.ts','ServerRequest.ts','ServerNotification.ts'])fs.writeFileSync(path.join(out,name),'export type Empty=never;');process.exit(0);
+}
+if(args[0]==='app-server'){
+ const rl=readline.createInterface({input:process.stdin});
+ rl.on('line',line=>{const m=JSON.parse(line);if(logFile&&m.method!=='initialized')fs.appendFileSync(logFile,JSON.stringify({method:m.method,params:m.params})+'\\n');if(m.method==='initialize')return console.log(JSON.stringify({id:m.id,result:{codexHome:'/fake',platformFamily:'unix',platformOs:'linux'}}));if(m.method==='initialized')return;if(m.method==='thread/start'||m.method==='thread/resume')return console.log(JSON.stringify({id:m.id,result:{thread:{id:'thread-1',turns:[]}}}));if(m.method==='thread/settings/update')return console.log(JSON.stringify({id:m.id,result:{threadId:'thread-1'}}));if(m.method==='turn/start')return console.log(JSON.stringify({id:m.id,result:{turn:{id:'turn-1',status:'inProgress'}}}));if(m.method==='command/exec')return console.log(JSON.stringify({id:m.id,result:{processId:'process-1'}}));if(m.id!==undefined)console.log(JSON.stringify({id:m.id,result:{}}));});return;
+}
+process.exit(2);
+`,{mode:0o755}); return file;
+}
 async function waitReady(url, child){let logs='';child.stderr?.on('data',x=>logs+=x);child.stdout?.on('data',x=>logs+=x);for(let i=0;i<80;i++){if(child.exitCode!==null)throw new Error(`server exited ${child.exitCode}\n${logs}`);try{const r=await fetch(`${url}/readyz`);if(r.status===200)return;}catch{}await new Promise(r=>setTimeout(r,50));}throw new Error(`server/app-server did not become ready\n${logs}`);}
 function sseReader(response){const reader=response.body.getReader();const decoder=new TextDecoder();let buffer='';return{async next(){for(;;){const boundary=buffer.indexOf('\n\n');if(boundary>=0){const frame=buffer.slice(0,boundary);buffer=buffer.slice(boundary+2);const data=frame.split('\n').filter(line=>line.startsWith('data:')).map(line=>line.slice(5).trimStart()).join('\n');if(data)return JSON.parse(data);continue}const chunk=await reader.read();if(chunk.done)return null;buffer+=decoder.decode(chunk.value,{stream:true})}},cancel(){return reader.cancel()}}}
 function sseNextWithTimeout(reader,ms=5000){let timer;return Promise.race([reader.next(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(`SSE event timeout after ${ms}ms`)),ms)})]).finally(()=>clearTimeout(timer))}
@@ -262,5 +288,31 @@ test('Web write control blocks mutations while preserving official reads', async
   const blocked=await fetch(url+'/api/rpc',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'thread/resume',params:{threadId:'thread-1'}})}); assert.equal(blocked.status,403,logs); assert.equal((await blocked.json()).error,'WEB_WRITE_DISABLED');
   const on=await fetch(url+'/api/control',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({webWriteEnabled:true})}); assert.equal(on.status,200,logs);
   const conflict=await fetch(url+'/api/rpc',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'thread/resume',params:{threadId:'thread-1'}})}); assert.equal(conflict.status,409,logs); assert.equal((await conflict.json()).error,'THREAD_READ_ONLY');
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir,'state','control.json'),'utf8')),{webWriteEnabled:true});
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir,'state','control.json'),'utf8')),{webWriteEnabled:true,autonomousMode:false});
+});
+
+test('unattended control injects the official Full access policy at the gateway boundary', async(t)=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cweb-autonomous-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const logFile=path.join(dir,'rpc-log.jsonl'),codex=fakeAutonomousCodex(dir),port=await getFreePort(),url='http://127.0.0.1:'+port,token='autonomous-test-token'; let logs='';
+  const child=spawn(process.execPath,['src/server.mjs'],{cwd:root,env:{...process.env,CWEB_CODEX_BIN:codex,CWEB_STATE_DIR:path.join(dir,'state'),CWEB_WORKSPACE:dir,CWEB_HOST:'127.0.0.1',CWEB_PORT:String(port),CWEB_REQUIRE_AUTH:'1',CWEB_TOKEN:token,CWEB_MCP_APPS:'0'},stdio:['ignore','pipe','pipe']});
+  child.stdout.on('data',x=>logs+=x); child.stderr.on('data',x=>logs+=x); t.after(()=>{if(child.exitCode===null)child.kill('SIGTERM')});
+  await waitReady(url,child); const origin=url; const login=await fetch(url+'/api/login',{method:'POST',headers:{'content-type':'application/json',origin},body:JSON.stringify({token})}); assert.equal(login.status,200,logs); const cookie=login.headers.get('set-cookie').split(';',1)[0];
+  const meta=await (await fetch(url+'/api/meta',{headers:{cookie}})).json(); assert.equal(meta.autonomous.supported,true,JSON.stringify(meta)); assert.equal(meta.control.autonomousMode,false);
+  const enabled=await fetch(url+'/api/control',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({autonomousMode:true})}); assert.equal(enabled.status,200,logs); const enabledBody=await enabled.json(); assert.equal(enabledBody.control.effectiveAutonomousMode,true);
+  const headers={'content-type':'application/json',origin,cookie};
+  const send=(method,params)=>fetch(url+'/api/rpc',{method:'POST',headers,body:JSON.stringify({method,params})});
+  assert.equal((await send('thread/start',{cwd:dir,approvalPolicy:'on-request',sandbox:'read-only',permissions:'safe'})).status,200,logs);
+  assert.equal((await send('thread/resume',{threadId:'thread-1',approvalPolicy:'on-request',sandbox:'read-only',permissions:'safe'})).status,200,logs);
+  assert.equal((await send('thread/settings/update',{threadId:'thread-1',approvalPolicy:'on-request',sandboxPolicy:{type:'readOnly'},permissions:'safe'})).status,200,logs);
+  assert.equal((await send('turn/start',{threadId:'thread-1',input:[],approvalPolicy:'on-request',sandboxPolicy:{type:'readOnly'},permissions:'safe'})).status,200,logs);
+  assert.equal((await send('command/exec',{command:['true'],permissionProfile:'safe',sandboxPolicy:{type:'readOnly'}})).status,200,logs);
+  const readEntries=()=>fs.readFileSync(logFile,'utf8').trim().split('\n').map(line=>JSON.parse(line));
+  const byMethod=method=>readEntries().findLast(item=>item.method===method)?.params;
+  for(const method of ['thread/start','thread/resume']){const params=byMethod(method);assert.equal(params.approvalPolicy,'never');assert.equal(params.sandbox,'danger-full-access');assert.equal(Object.hasOwn(params,'permissions'),false)}
+  for(const method of ['thread/settings/update','turn/start']){const params=byMethod(method);assert.equal(params.approvalPolicy,'never');assert.deepEqual(params.sandboxPolicy,{type:'dangerFullAccess'});assert.equal(Object.hasOwn(params,'permissions'),false)}
+  const command=byMethod('command/exec');assert.deepEqual(command.sandboxPolicy,{type:'dangerFullAccess'});assert.equal(Object.hasOwn(command,'permissionProfile'),false);
+  const disabled=await fetch(url+'/api/control',{method:'POST',headers,body:JSON.stringify({autonomousMode:false})}); assert.equal(disabled.status,200,logs); assert.equal((await disabled.json()).control.effectiveAutonomousMode,false);
+  const normal=await send('turn/start',{threadId:'thread-1',input:[],approvalPolicy:'on-request',sandboxPolicy:{type:'readOnly'}}); assert.equal(normal.status,200,logs); const normalParams=byMethod('turn/start'); assert.equal(normalParams.approvalPolicy,'on-request'); assert.deepEqual(normalParams.sandboxPolicy,{type:'readOnly'});
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir,'state','control.json'),'utf8')),{webWriteEnabled:true,autonomousMode:false});
+  child.kill('SIGTERM'); await new Promise(resolve=>child.once('exit',resolve));
 });

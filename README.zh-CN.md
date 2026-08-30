@@ -26,6 +26,7 @@
 | --- | --- |
 | 官方协议 | 启动时从官方 Codex 二进制生成 JSON Schema 与 TypeScript 契约，支持 Stable/Experimental 协商，schema gate 失败即关闭；覆盖当前官方 ThreadItem，为每个官方 ServerNotification 提供有界观察日志，并提供“官方接口”面板调用其余导出方法。 |
 | 会话体验 | 会话列表、新建/读取/列表/恢复，官方重命名/归档/取消归档/删除，模型与推理强度，官方图片输入，停止任务，实时调整方向，上下文压缩，以及官方 Turn 耗时。 |
+| 无人值守执行 | 侧栏提供显式的“无人值守”开关；开启后将官方 `approvalPolicy:'never'` 与 `danger-full-access` 接到新建、恢复、设置、Turn 和命令执行路径，关闭后恢复官方默认审批。 |
 | 快速会话 | 快速会话显示最近 10 条 Turn；先用官方 `itemsView: notLoaded` 读取轻量结构，再通过官方 `thread/items/list`、有界并发自动补齐这 10 条的会话内容和工作过程。如果运行时拒绝了已声明的可选历史接口，网页会触发一次性兼容回退，改用稳定的 `thread/read`，并隐藏不可用的分页控件。 |
 | 历史完整会话 | 只有历史完整会话会沿官方游标逐页读取更早内容；更早 Turn 的会话内容和工作过程按 Turn、按可视区或明确操作懒加载，快速会话不显示更早分页按钮。 |
 | 会话搜索 | 使用官方 `thread/searchOccurrences` 分页和官方匹配摘要进行完整历史关键词搜索，并补充已经渲染的工作过程文本。 |
@@ -68,6 +69,8 @@ Host 页面
 快速会话的显式会话选择会绕过旧浏览器缓存，重新读取官方最近 10 条摘要页，并显示快速视图边界；SSE 新连接会接收网关保存的有界活动官方计划快照，终态或空计划会清理它。
 
 原生界面包括历史/read/resume、官方 `thread/turns/list` 摘要分页、按 Turn 通过 `thread/items/list` 读取完整项、侧边栏“历史完整会话”模式、完整历史关键词筛选、实时 Turn/Item、流式 delta、模型与 reasoning、官方 Turn 处理时长、interrupt、命令/文件/权限审批、用户输入、MCP elicitation、断线权威重同步，以及 MCP App 渲染。执行项会像 Codex 一样收进默认折叠的“工作过程”，主回答保持在对话主线上；官方返回非空计划时，计划卡固定在输入框上方，桌面端悬停/聚焦查看步骤，触屏端点击展开；活动 Turn 中继续输入会走官方 `turn/steer` 调整方向，手动上下文整理走官方 `thread/compact/start`，并显示压缩动画。运行中标题和运行指示跟随官方 Turn/线程活动事件，包括不携带 `turnId` 的官方线程级 active 状态；停止、调整方向、上下文用量和网页写入权限仍只属于持有本地 Turn 标记的网页标签。即使只丢失 `turn/completed`，网页也会用有界的官方只读核对清除本地运行状态，空闲时不伪造运行状态。其余不常用官方方法仍可在 **官方接口** Drawer 中按当前官方 schema 直接调用。发送消息会携带官方 `clientUserMessageId`；如果官方已接受但响应在网络中丢失，输入框会立即清空并进入可持久化的“正在确认”状态，再通过官方分页会话列表核对，而不是允许误发重复消息。网关还会为相同会话与官方消息标识保留有界十分钟结果缓存，用户明确重试时可恢复丢失的响应而不重复向上游发送。运行时长依据官方开始时间实时读秒，终止 Turn 替换摘要表示时会保留已经收到的工作过程。
+
+侧栏“写入控制”同时提供“网页写入”和“无人值守”两个独立开关。无人值守只在网页可写且当前官方 schema 导出所需字段时生效；它不修改 `auth.json` / `config.toml`，而是由网关在官方 RPC 进入 App Server 前附加对应的官方执行策略。用户输入、MCP elicitation、第三方工具的副作用确认等并非普通命令审批的官方请求仍按协议显示交互卡片。点击左上角 Codex 标志或顶部右侧的首页图标可返回首页，不会删除官方会话。
 
 共享历史遵循单写入者边界：选择会话和重连恢复只使用官方 `thread/read` 与分页读取，不自动 `thread/resume`；只有明确发送或管理操作时才尝试写入。网页不再额外增加“桌面占用保护”闸门：官方活动只负责真实显示运行状态，只有官方实际返回 active-writer 冲突时，网页才临时进入只读并在任务结束后恢复。侧栏只保留默认开启的“网页写入”开关，并由官方 App Server 决定并发写入是否被接受。会话菜单使用官方 `thread/name/set`、`thread/archive`、`thread/unarchive`、`thread/delete`，不直接改历史文件。
 
@@ -112,6 +115,7 @@ npm start
 | `CWEB_TOKEN` | 空 | 开启鉴权时必填 |
 | `CWEB_PUBLIC_ORIGIN` | 空 | 可信公网 exact origin |
 | `CWEB_ACCESS_PROFILE` | `full` | `read` / `coding` / `admin` / `full` |
+| `CWEB_AUTONOMOUS_MODE` | `0` | 网关启动时无人值守开关的默认值；也可在网页侧栏中持久化切换 |
 | `CWEB_EXPERIMENTAL` | `1` | 开启官方 experimental API（分页历史依赖此官方握手）；设为 `0` 可强制仅稳定协议回退。即使开启了 experimental，只要运行时拒绝已声明的可选历史接口，也会自动切换本次 Web 进程的稳定 `thread/read`，不会循环重试 |
 | `CWEB_MCP_APPS` | `1` | 声明并渲染稳定 MCP Apps 扩展 |
 | `CWEB_MCP_APP_PERMISSIONS` | 空 | 可选权限 allow-list；最终仍受浏览器 secure-context / Permissions Policy 约束 |

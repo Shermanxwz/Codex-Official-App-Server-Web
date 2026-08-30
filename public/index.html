@@ -15,7 +15,7 @@
 
     <aside id="sidebar" class="sidebar">
       <div class="brand-row">
-        <div class="brand">
+        <button id="homeButton" class="brand home-button" type="button" data-i18n-title="home" title="返回首页" aria-label="返回首页">
           <div class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 24 24" role="img"><path d="M12 2.5 20.2 7v10L12 21.5 3.8 17V7L12 2.5Zm0 2.3L6 8.1v7.8l6 3.3 6-3.3V8.1l-6-3.3Zm0 3.1 3.8 2.1v4L12 16.1 8.2 14v-4L12 7.9Z"/></svg>
           </div>
@@ -23,7 +23,7 @@
             <strong>Codex</strong>
             <small data-i18n="officialClient">Official App Server Web</small>
           </div>
-        </div>
+        </button>
         <button id="collapseSidebar" class="icon-button desktop-only" type="button" title="Collapse sidebar" aria-label="Collapse sidebar">‹</button>
       </div>
 
@@ -63,6 +63,11 @@
             <span><span class="sidebar-switch-dot" aria-hidden="true"></span><span data-i18n="webWriteToggle">网页写入</span></span>
             <strong id="webWriteState">开</strong>
           </button>
+          <button id="autonomousToggle" class="sidebar-switch" type="button" role="switch" aria-checked="false">
+            <span><span class="sidebar-switch-dot" aria-hidden="true"></span><span data-i18n="autonomousMode">无人值守</span></span>
+            <strong id="autonomousState">按需确认</strong>
+          </button>
+          <small id="autonomousNote" class="sidebar-control-note">开启后使用官方 Full access；关闭则恢复官方默认审批。</small>
         </section>
         <div class="sidebar-footer-row">
           <button id="langToggle" class="nav-button compact" type="button">中 / EN</button>
@@ -94,6 +99,7 @@
           <button id="reloadThread" class="icon-button" type="button" data-i18n-title="reload" title="刷新">↻</button>
           <button id="compactThread" class="icon-button hidden" type="button" data-i18n-title="contextCompact" title="压缩上下文" aria-label="压缩上下文">≋</button>
           <button id="interrupt" class="stop-button hidden" type="button" data-i18n="stop">停止</button>
+          <button id="homeButtonTop" class="icon-button" type="button" data-i18n-title="home" title="返回首页" aria-label="返回首页">⌂</button>
           <button id="openProtocolTop" class="icon-button" type="button" title="Official APIs">•••</button>
         </div>
       </header>

@@ -84,6 +84,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
     printf 'CWEB_CODEX_TRANSPORT=websocket\n'
     printf 'CWEB_CODEX_SERVER_URL=ws://127.0.0.1:43999\n'
     printf 'CWEB_EXPERIMENTAL=1\n'
+    printf 'CWEB_AUTONOMOUS_MODE=0\n'
     if [[ -n "${CWEB_PUBLIC_ORIGIN:-}" ]]; then printf 'CWEB_PUBLIC_ORIGIN=%s\n' "$(quote_env "$CWEB_PUBLIC_ORIGIN")"; fi
     printf 'CWEB_STATE_DIR=%s\n' "$(quote_env "$STATE_DIR")"
     printf 'CWEB_CONFIG_DIR=%s\n' "$(quote_env "$CONFIG_DIR")"
@@ -116,6 +117,9 @@ else
   fi
   if ! grep -q '^CWEB_EXPERIMENTAL=' "$ENV_FILE"; then
     printf 'CWEB_EXPERIMENTAL=1\n' >> "$ENV_FILE"
+  fi
+  if ! grep -q '^CWEB_AUTONOMOUS_MODE=' "$ENV_FILE"; then
+    printf 'CWEB_AUTONOMOUS_MODE=0\n' >> "$ENV_FILE"
   fi
   if ! grep -q '^CWEB_STATE_DIR=' "$ENV_FILE"; then
     printf 'CWEB_STATE_DIR=%s\n' "$(quote_env "$STATE_DIR")" >> "$ENV_FILE"

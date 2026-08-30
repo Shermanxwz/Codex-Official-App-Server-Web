@@ -52,6 +52,9 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(html, /id="officialPlanDock"/);
   assert.match(html, /id="autoScrollToggle"/);
   assert.match(html, /id="deliveryStatus"/);
+  assert.match(html, /id="homeButton"/);
+  assert.match(html, /id="homeButtonTop"/);
+  assert.match(html, /id="autonomousToggle"/);
   assert.match(app, /turn\/steer/);
   assert.match(app, /clientUserMessageId/);
   assert.match(app, /const request=rpc\('turn\/start'/);
@@ -163,6 +166,10 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /Array\.isArray\(payload\?\.plan\)&&payload\.plan\.length===0/);
   assert.match(app, /classifyOfficialActivity/);
   assert.match(app, /control:\{webWriteEnabled:true/);
+  assert.match(app, /autonomousMode/);
+  assert.match(app, /approvalPolicy='never'/);
+  assert.match(app, /danger-full-access/);
+  assert.match(app, /function goHome/);
   assert.doesNotMatch(app, /desktopWriteProtection|controlDesktopGuardEnabled|桌面占用保护|Desktop ownership guard/);
   assert.doesNotMatch(html, /desktopGuardToggle|desktopGuardState|桌面占用保护/);
   assert.match(app, /eventReconnectWatchdog/);
@@ -272,6 +279,10 @@ test('runtime server advertises the implemented MCP Apps profile and gates Dynam
   assert.match(server, /activePlans: activeOfficialPlanNotifications\(\)/);
   assert.match(server, /mcpAppsDoubleIframeSandbox:\s*true/);
   assert.match(server, /CWEB_DYNAMIC_TOOLS_FILE requires CWEB_EXPERIMENTAL=1/);
+  assert.match(server, /AUTONOMOUS_MODE_UNSUPPORTED/);
+  assert.match(server, /autonomousExecutionEnabled/);
+  assert.match(server, /danger-full-access/);
+  assert.match(config, /autonomousMode:\s*bool\('CWEB_AUTONOMOUS_MODE'/);
   assert.match(server, /properties\?\.dynamicTools/);
   assert.match(server, /message\.method === 'currentTime\/read'/);
   assert.match(server, /function rejectDynamicToolRequest/);

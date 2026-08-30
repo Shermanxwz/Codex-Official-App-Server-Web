@@ -24,12 +24,41 @@ fs.mkdirSync(config.stateDir, { recursive: true, mode: 0o700 });
 const stateMaintenance = pruneStateArtifacts(config.stateDir);
 if (stateMaintenance.removed.length) console.log(`Removed ${stateMaintenance.removed.length} stale schema swap artifact(s)`);
 
-const DEFAULT_CONTROL_STATE = { webWriteEnabled: true };
+let registry;
+const AUTONOMOUS_POLICY_FIELDS = {
+  'thread/start': ['approvalPolicy', 'sandbox', 'permissions'],
+  'thread/resume': ['approvalPolicy', 'sandbox', 'permissions'],
+  'thread/fork': ['approvalPolicy', 'sandbox', 'permissions'],
+  'thread/settings/update': ['approvalPolicy', 'sandboxPolicy', 'permissions'],
+  'turn/start': ['approvalPolicy', 'sandboxPolicy', 'permissions'],
+  'command/exec': ['sandboxPolicy', 'permissionProfile'],
+};
+function autonomousPolicySupport() {
+  const methods = Object.fromEntries(Object.entries(AUTONOMOUS_POLICY_FIELDS).map(([method, fields]) => {
+    const properties = registry?.getRequest(method)?.paramsSchema?.properties || {};
+    return [method, fields.filter((field) => Object.hasOwn(properties, field))];
+  }));
+  const has = (method, field) => methods[method]?.includes(field);
+  return {
+    supported: Boolean(has('thread/start', 'approvalPolicy') && has('thread/start', 'sandbox')
+      && has('turn/start', 'approvalPolicy') && has('turn/start', 'sandboxPolicy')),
+    methods,
+  };
+}
+function autonomousExecutionEnabled() {
+  return controlState.autonomousMode === true
+    && controlState.webWriteEnabled !== false
+    && config.accessProfile !== 'read'
+    && autonomousPolicySupport().supported;
+}
+
+const DEFAULT_CONTROL_STATE = { webWriteEnabled: true, autonomousMode: config.autonomousMode };
 function loadControlState() {
   try {
     const value = JSON.parse(fs.readFileSync(controlFile, 'utf8'));
     return {
       webWriteEnabled: value?.webWriteEnabled !== false,
+      autonomousMode: typeof value?.autonomousMode === 'boolean' ? value.autonomousMode : config.autonomousMode,
     };
   } catch {
     return { ...DEFAULT_CONTROL_STATE };
@@ -37,14 +66,18 @@ function loadControlState() {
 }
 let controlState = loadControlState();
 function controlSnapshot() {
+  const support = autonomousPolicySupport();
   return {
     ...controlState,
     effectiveWebWriteEnabled: controlState.webWriteEnabled && config.accessProfile !== 'read',
+    effectiveAutonomousMode: autonomousExecutionEnabled(),
+    autonomousSupported: support.supported,
   };
 }
 function saveControlState(next) {
   controlState = {
     webWriteEnabled: next?.webWriteEnabled !== false,
+    autonomousMode: typeof next?.autonomousMode === 'boolean' ? next.autonomousMode : controlState.autonomousMode,
   };
   const temporary = `${controlFile}.tmp-${process.pid}`;
   fs.writeFileSync(temporary, `${JSON.stringify(controlState)}\n`, { mode: 0o600 });
@@ -81,7 +114,6 @@ if (config.codexTransport === 'websocket') {
   }
 }
 
-let registry;
 try {
   registry = new OfficialSchemaRegistry({
     dir: schemaDir, codexBin: config.codexBin, experimental: config.experimental,
@@ -578,6 +610,22 @@ function managedParams(method, params) {
     }
     value.dynamicTools = dynamicToolHost.specs;
   }
+  if (autonomousExecutionEnabled()) {
+    const fields = autonomousPolicySupport().methods[method] || [];
+    const has = (field) => fields.includes(field);
+    if (['thread/start', 'thread/resume', 'thread/fork'].includes(method)) {
+      if (has('approvalPolicy')) value.approvalPolicy = 'never';
+      if (has('sandbox')) value.sandbox = 'danger-full-access';
+      delete value.permissions;
+    } else if (['thread/settings/update', 'turn/start'].includes(method)) {
+      if (has('approvalPolicy')) value.approvalPolicy = 'never';
+      if (has('sandboxPolicy')) value.sandboxPolicy = { type: 'dangerFullAccess' };
+      delete value.permissions;
+    } else if (method === 'command/exec') {
+      if (has('sandboxPolicy')) value.sandboxPolicy = { type: 'dangerFullAccess' };
+      delete value.permissionProfile;
+    }
+  }
   return value;
 }
 
@@ -607,6 +655,15 @@ async function api(req, res, url) {
     const body = jsonObjectBody(await readJson(req, 64 * 1024));
     const next = { ...controlState };
     if (typeof body.webWriteEnabled === 'boolean') next.webWriteEnabled = body.webWriteEnabled;
+    if (typeof body.autonomousMode === 'boolean') {
+      if (body.autonomousMode && !autonomousPolicySupport().supported) {
+        return json(res, 409, {
+          error: 'AUTONOMOUS_MODE_UNSUPPORTED',
+          message: '当前官方 Codex App Server 未导出 Full access 所需的审批与沙箱字段。',
+        });
+      }
+      next.autonomousMode = body.autonomousMode;
+    }
     const control = saveControlState(next);
     pushEvent('controlChanged', { control });
     return json(res, 200, { control });
@@ -615,11 +672,15 @@ async function api(req, res, url) {
   if (pathname === '/api/meta' && req.method === 'GET') {
     let initializeResult = codex.initializeResult;
     try { initializeResult = await codex.start(); } catch (error) { fatalCodexError = error.message; scheduleCodexRestart(); }
+    const control = controlSnapshot();
+    const autonomous = autonomousPolicySupport();
     return json(res, 200, {
       app: 'codex-app-server-web', version: APP_VERSION, workspace: config.workspace,
       runtime: { bootId: runtimeBootId, startedAt: runtimeStartedAt },
       status: codex.isReady() && !fatalCodexError ? 'ready' : 'degraded', error: fatalCodexError,
-      schema: registry.summary(), initializeResult, access: { profile: config.accessProfile }, control: controlSnapshot(), protocolSupport: protocolSupportSummary(),
+      schema: registry.summary(), initializeResult, access: { profile: config.accessProfile }, control,
+      autonomous: { enabled: control.autonomousMode, effective: control.effectiveAutonomousMode, ...autonomous },
+      protocolSupport: protocolSupportSummary(),
       capabilities: {
         experimentalApi: config.experimental,
         extensions: { 'openai/form': {}, ...(config.mcpAppsEnabled ? { [MCP_APPS_EXTENSION]: { mimeTypes: [MCP_APPS_MIME] } } : {}) },
@@ -628,6 +689,7 @@ async function api(req, res, url) {
         dynamicToolHost: { enabled: dynamicToolHost.size > 0, tools: dynamicToolHost.size, experimentalRequired: true },
         currentTimeHost: config.experimental && Boolean(registry.getServerRequest('currentTime/read')),
         platformOnlyServerRequests: [...MACHINE_ONLY_SERVER_REQUESTS],
+        autonomousExecution: { supported: autonomous.supported, effective: control.effectiveAutonomousMode },
       },
       contract: {
         officialAppServerOnly: true, directCodexStateMutation: false, privateProtocol: false, transport: config.codexTransport,
@@ -636,7 +698,7 @@ async function api(req, res, url) {
         nativeItemTimeline: true, exactProtocolDispositionSeal: true, openaiFormNative: true,
         mcpAppsAdvertised: config.mcpAppsEnabled, mcpAppsDoubleIframeSandbox: true,
         dynamicToolsExperimentalOnly: true,
-        singleWriterReadBoundary: true, webWriteControl: true,
+        singleWriterReadBoundary: true, webWriteControl: true, autonomousExecutionPolicy: true,
       },
     });
   }

@@ -36,8 +36,8 @@ const callEvidence = [
   ['thread/read', source.app, /rpc\('thread\/read',\{threadId/],
   ['thread/turns/list', source.app, /rpc\('thread\/turns\/list',\{threadId/],
   ['thread/items/list', source.app, /officialHistoryPage\('thread\/items\/list',params/],
-  ['thread/start', source.app, /rpc\('thread\/start',p\)/],
-  ['thread/resume', source.app, /rpc\('thread\/resume',\{threadId:key/],
+  ['thread/start', source.app, /rpc\('thread\/start',(?:p|autonomousParams\('thread\/start',p\))\)/],
+  ['thread/resume', source.app, /rpc\('thread\/resume',(?:\{threadId:key|autonomousParams\('thread\/resume',\{threadId:key)/],
   ['turn/start', source.app, /const p=\{threadId,input:/],
   ['turn/steer', source.app, /rpc\('turn\/steer',\{threadId,expectedTurnId,input:/],
   ['turn/interrupt', source.app, /rpc\('turn\/interrupt',\{threadId:state\.currentThread\.id,turnId:/],
@@ -80,7 +80,7 @@ try {
     if (!source.index.includes(needle)) errors.push(`official event observer missing: ${needle}`);
   }
   const allDeclaredDeltaNotifications = new Set(Object.keys(TIMELINE_DELTA_NOTIFICATIONS));
-  const stableOptionalRequests = new Set(['thread/turns/list', 'thread/items/list', 'thread/searchOccurrences']);
+  const stableOptionalRequests = new Set(['thread/turns/list', 'thread/items/list', 'thread/searchOccurrences', 'thread/settings/update']);
   const stableOptionalServerRequests = new Set(['currentTime/read']);
 
   for (const experimental of [false, true]) {

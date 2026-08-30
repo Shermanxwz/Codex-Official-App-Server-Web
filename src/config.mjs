@@ -53,6 +53,9 @@ export const config = Object.freeze({
   publicOrigin: process.env.CWEB_PUBLIC_ORIGIN || '',
   token: process.env.CWEB_TOKEN || '',
   accessProfile: choice('CWEB_ACCESS_PROFILE', 'full', ['read', 'coding', 'admin', 'full']),
+  // Opt-in bridge to the official Codex Full access combination. The Web
+  // control file can change this after startup without touching Codex config.
+  autonomousMode: bool('CWEB_AUTONOMOUS_MODE', false),
   // Receive every official notification by default. The browser keeps
   // transport-only events out of the conversation while retaining them in its
   // bounded Official Events observer. Operators may still opt out explicitly.
