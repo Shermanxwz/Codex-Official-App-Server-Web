@@ -4,11 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { OfficialSchemaRegistry } from '../src/schema-registry.mjs';
 import {
-  SERVER_NOTIFICATION_FALLBACK, SERVER_REQUEST_SUPPORT, THREAD_ITEM_TYPES, TIMELINE_DELTA_NOTIFICATIONS,
+  FORWARD_COMPATIBLE_THREAD_ITEM_TYPES, SERVER_NOTIFICATION_FALLBACK, SERVER_REQUEST_SUPPORT, THREAD_ITEM_TYPES, TIMELINE_DELTA_NOTIFICATIONS,
 } from '../public/protocol-support.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const codexBin = process.env.CWEB_CODEX_BIN || 'codex';
+const forwardCompatibleItems = new Set(FORWARD_COMPATIBLE_THREAD_ITEM_TYPES);
 const source = {
   app: fs.readFileSync(path.join(root, 'public/app.js'), 'utf8'),
   events: fs.readFileSync(path.join(root, 'public/official-events.js'), 'utf8'),
@@ -97,7 +98,7 @@ try {
     assertSubset(allDeclaredDeltaNotifications, serverNotifications, `${label} official ServerNotification missing`, errors);
     assertSubset(new Set([...Object.keys(SERVER_REQUEST_SUPPORT)].filter((method) => !(label === 'stable' && stableOptionalServerRequests.has(method)))), serverRequests, `${label} stale ServerRequest disposition`, errors);
     assertSubset(new Set([...serverRequests].filter((method) => !(label === 'stable' && stableOptionalServerRequests.has(method)))), new Set(Object.keys(SERVER_REQUEST_SUPPORT)), `${label} undisposed ServerRequest`, errors);
-    assertSubset(new Set(THREAD_ITEM_TYPES), officialItems, `${label} stale ThreadItem renderer`, errors);
+    assertSubset(new Set([...THREAD_ITEM_TYPES].filter((type) => !forwardCompatibleItems.has(type))), officialItems, `${label} stale ThreadItem renderer`, errors);
     assertSubset(officialItems, new Set(THREAD_ITEM_TYPES), `${label} undisposed ThreadItem`, errors);
 
     if (!requests.has('initialize')) errors.push(`${label} official ClientRequest missing initialize`);

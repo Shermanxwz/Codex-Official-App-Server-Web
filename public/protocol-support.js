@@ -1,9 +1,12 @@
 if (typeof window !== 'undefined' && typeof document !== 'undefined') await import('./mcp-app-host.js');
 
+export const FORWARD_COMPATIBLE_THREAD_ITEM_TYPES = Object.freeze(['functionCallOutput']);
+
 export const THREAD_ITEM_TYPES = Object.freeze([
   'userMessage', 'hookPrompt', 'agentMessage', 'plan', 'reasoning', 'commandExecution', 'fileChange',
   'mcpToolCall', 'dynamicToolCall', 'collabAgentToolCall', 'subAgentActivity', 'webSearch', 'imageView',
   'sleep', 'imageGeneration', 'enteredReviewMode', 'exitedReviewMode', 'contextCompaction',
+  ...FORWARD_COMPATIBLE_THREAD_ITEM_TYPES,
 ]);
 
 export const SERVER_REQUEST_SUPPORT = Object.freeze({

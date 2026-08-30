@@ -11,7 +11,7 @@ import {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 test('archive support registry covers every current first-class Codex item disposition', () => {
-  assert.equal(THREAD_ITEM_TYPES.length, 18);
+  assert.equal(THREAD_ITEM_TYPES.length, 19);
   assert.equal(new Set(THREAD_ITEM_TYPES).size, THREAD_ITEM_TYPES.length);
   const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
   for (const type of THREAD_ITEM_TYPES) assert.match(app, new RegExp(`case\\s*['\"]${type}['\"]`), `missing native renderer disposition for ${type}`);
@@ -255,7 +255,7 @@ test('all declared ServerRequest methods have one explicit trust/UI disposition'
 
 test('published support summary advertises only implemented archive hosts', () => {
   const summary = protocolSupportSummary();
-  assert.equal(summary.threadItemTypes, 18);
+  assert.equal(summary.threadItemTypes, 19);
   assert.equal(summary.serverRequests, 11);
   assert.equal(summary.openaiForm, true);
   assert.equal(summary.mcpAppsHost, true);

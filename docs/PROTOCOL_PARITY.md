@@ -12,7 +12,7 @@ All exported stable ClientRequest/ClientNotification methods are schema-gated. `
 
 Every exported ServerNotification has a universal `official-event-log` disposition before any specialized handler runs. The observer retains at most 200 complete entries and 1 MiB, replaces an individual payload above 128 KiB with method/size metadata, and is cleared explicitly by the operator or on page reload. Conversation rendering remains intentionally narrower so process, realtime and MCP event-stream notifications are observable without being misrepresented as chat messages.
 
-The first-class timeline has an explicit disposition for every sealed official ThreadItem variant: `userMessage`, `hookPrompt`, `agentMessage`, `plan`, `reasoning`, `commandExecution`, `fileChange`, `mcpToolCall`, `dynamicToolCall`, `collabAgentToolCall`, `subAgentActivity`, `webSearch`, `imageView`, `sleep`, `imageGeneration`, `enteredReviewMode`, `exitedReviewMode`, `contextCompaction`.
+The first-class timeline has an explicit disposition for every sealed official ThreadItem variant: `userMessage`, `hookPrompt`, `agentMessage`, `plan`, `reasoning`, `commandExecution`, `fileChange`, `mcpToolCall`, `dynamicToolCall`, `collabAgentToolCall`, `subAgentActivity`, `webSearch`, `imageView`, `sleep`, `imageGeneration`, `enteredReviewMode`, `exitedReviewMode`, `contextCompaction`, `functionCallOutput`. The forward-compatible `functionCallOutput` variant uses the bounded generic work-process renderer so its official payload remains observable without assuming a version-specific shape.
 
 ## ServerRequest dispositions
 
