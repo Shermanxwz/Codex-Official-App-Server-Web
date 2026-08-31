@@ -68,7 +68,7 @@ Host 页面
 
 快速会话的显式会话选择会绕过旧浏览器缓存，重新读取官方最近 10 条摘要页，并显示快速视图边界；SSE 新连接会接收网关保存的有界活动官方计划快照，终态或空计划会清理它。
 
-原生界面包括历史/read/resume、官方 `thread/turns/list` 摘要分页、按 Turn 通过 `thread/items/list` 读取完整项、侧边栏“历史完整会话”模式、完整历史关键词筛选、实时 Turn/Item、流式 delta、模型与 reasoning、官方 Turn 处理时长、interrupt、命令/文件/权限审批、用户输入、MCP elicitation、断线权威重同步，以及 MCP App 渲染。执行项会像 Codex 一样收进默认折叠的“工作过程”，主回答保持在对话主线上；官方返回非空计划时，计划卡固定在输入框上方，桌面端悬停/聚焦查看步骤，触屏端点击展开；活动 Turn 中继续输入会走官方 `turn/steer` 调整方向，手动上下文整理走官方 `thread/compact/start`，并显示压缩动画。运行中标题和运行指示跟随官方 Turn/线程活动事件，包括不携带 `turnId` 的官方线程级 active 状态；停止、调整方向、上下文用量和网页写入权限仍只属于持有本地 Turn 标记的网页标签。即使只丢失 `turn/completed`，网页也会用有界的官方只读核对清除本地运行状态，空闲时不伪造运行状态。其余不常用官方方法仍可在 **官方接口** Drawer 中按当前官方 schema 直接调用。发送消息会携带官方 `clientUserMessageId`；如果官方已接受但响应在网络中丢失，输入框会立即清空并进入可持久化的“正在确认”状态，再通过官方分页会话列表核对，而不是允许误发重复消息。网关还会为相同会话与官方消息标识保留有界十分钟结果缓存，用户明确重试时可恢复丢失的响应而不重复向上游发送。运行时长依据官方开始时间实时读秒，终止 Turn 替换摘要表示时会保留已经收到的工作过程。
+原生界面包括历史/read/resume、官方 `thread/turns/list` 摘要分页、按 Turn 通过 `thread/items/list` 读取完整项、侧边栏“历史完整会话”模式、完整历史关键词筛选、实时 Turn/Item、流式 delta、模型与 reasoning、官方 Turn 处理时长、interrupt、命令/文件/权限审批、用户输入、MCP elicitation、断线权威重同步，以及 MCP App 渲染。执行项会像 Codex 一样收进默认折叠的“工作过程”，主回答保持在对话主线上；官方返回非空计划时，计划卡固定在输入框上方，桌面端悬停/聚焦查看步骤，触屏端点击展开；活动 Turn 中继续输入会走官方 `turn/steer` 调整方向，手动上下文整理走官方 `thread/compact/start`，并显示压缩动画。运行中标题和运行指示跟随官方 Turn/线程活动事件，包括不携带 `turnId` 的官方线程级 active 状态；停止、调整方向、上下文用量和网页写入权限仍只属于持有本地 Turn 标记的网页标签。即使只丢失 `turn/completed`，网页也会用有界的官方只读核对清除本地运行状态，空闲时不伪造运行状态。能力摘要读取官方 MCP、Skills 和已安装 App 清单；仍在开发中的官方 Plugin 清单只有在 experimental 模式开启时才读取。其余不常用官方方法仍可在 **官方接口** Drawer 中按当前官方 schema 直接调用。发送消息会携带官方 `clientUserMessageId`；如果官方已接受但响应在网络中丢失，输入框会立即清空并进入可持久化的“正在确认”状态，再通过官方分页会话列表核对，而不是允许误发重复消息。网关还会为相同会话与官方消息标识保留有界十分钟结果缓存，用户明确重试时可恢复丢失的响应而不重复向上游发送。运行时长依据官方开始时间实时读秒，终止 Turn 替换摘要表示时会保留已经收到的工作过程。
 
 侧栏“写入控制”同时提供“网页写入”和“无人值守”两个独立开关。无人值守只在网页可写且当前官方 schema 导出所需字段时生效；它不修改 `auth.json` / `config.toml`，而是由网关在官方 RPC 进入 App Server 前附加对应的官方执行策略。用户输入、MCP elicitation、第三方工具的副作用确认等并非普通命令审批的官方请求仍按协议显示交互卡片。点击左上角 Codex 标志或顶部右侧的首页图标可返回首页，不会删除官方会话。
 
@@ -78,7 +78,11 @@ Host 页面
 
 每次网关启动都会生成运行代际标识，并同时通过 `/api/meta`、SSE `connected` 帧提供。浏览器在 SSE 断线重连、页面重新获得焦点或检测到代际变化时，只用官方权威历史重新读取页面，不会因为恢复页面而尝试抢占会话；`thread/resume` 仅在明确的网页写入动作中调用。若官方返回 active-writer 冲突，网关返回明确的只读状态，网页不会把它伪装成 502。Linux 安装器把官方 App Server 放在独立的 `codex-official-app-server.service` 中，网关重启不会终止官方 Turn；断线期间没有缓存的增量不会被伪造重放。若官方 App Server 自身被停止、崩溃或机器关机，操作系统仍会终止正在生成的 Turn；官方协议没有把已被终止的模型生成凭空续跑的接口。
 
-`CWEB_CODEX_TRANSPORT=websocket` 与 `CWEB_CODEX_SERVER_URL` 控制持久官方传输。WebSocket 端点只接受 loopback `ws(s)` 地址，官方服务单元不接收 Web 会话令牌或其他 `CWEB_*` 配置。`npm start` 未安装独立服务时仍默认为 stdio；要获得重启后继续接管的行为，应使用 `scripts/install-linux.sh` 安装的双服务部署。
+独立 App Server 不会自动继承桌面 Codex 的内置浏览器会话。本项目不捆绑、不模拟、也不注册自定义浏览器 MCP 服务。外部 MCP 服务必须由官方 Codex Runtime 配置提供，网页只透传官方 `mcpServerStatus/list`、`mcpServer/resource/read` 和 `mcpServer/tool/call`。未配置浏览器能力时，网页会显示未配置，不伪造工具；桌面 Browser/Computer Use 仍属于宿主提供的能力。
+
+外部 MCP 服务请使用官方 Codex CLI（`codex mcp list` / `codex mcp add`）配置；本项目不会写入 Codex 配置。修改 MCP 配置后请重启官方 App Server。
+
+`CWEB_CODEX_TRANSPORT=websocket` 与 `CWEB_CODEX_SERVER_URL` 控制持久官方传输。WebSocket 端点只接受 loopback `ws(s)` 地址，官方服务单元不接收 Web 会话令牌或其他 `CWEB_*` 配置。当前上游 App Server 文档将 WebSocket 传输标为 experimental，且不建议用于生产；若要遵守这一支持边界，请使用便携 stdio 路径。`npm start` 未安装独立服务时仍默认为 stdio；要获得重启后继续接管的行为，应使用 `scripts/install-linux.sh` 安装的双服务部署。
 
 网关不把聊天历史、模型输出或运行日志复制到项目目录；持久会话数据仍由官方 Codex Runtime 管理。项目只维护官方 schema 缓存，启动时会自动删除自己生成且已过期的 schema 交换 `.tmp/.bak` 临时物；`scripts/prune-state.mjs` 可手动执行同一清理。它不会自动删除 `~/.codex` 中的官方会话历史，避免误删用户数据。
 

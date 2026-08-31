@@ -53,10 +53,11 @@ const callEvidence = [
   ['mcpServer/resource/read', source.mcp, /originCallId: item\.id,[\s\S]*server: item\.server,[\s\S]*uri/],
   ['mcpServer/tool/call', source.mcp, /threadId: session\.threadId, server: session\.item\.server, tool: name/],
 ];
-// These four inventory requests are intentionally invoked through one small
+// These inventory requests are intentionally invoked through one small
 // capability loop in the browser, so they do not appear as literal
 // `rpc('method', ...)` calls. Keep them in the same official-schema gate.
-const capabilityMethods = ['mcpServerStatus/list', 'skills/list', 'plugin/list', 'app/installed'];
+const capabilityMethods = ['mcpServerStatus/list', 'skills/list', 'app/installed'];
+const experimentalCapabilityMethods = ['plugin/list'];
 const capabilityEvidence = /const specs=\[\['mcpServerStatus\/list',mcpCapabilityGroup\],\['skills\/list',skillsCapabilityGroup\],\['plugin\/list',pluginCapabilityGroup\],\['app\/installed',appCapabilityGroup\]\]/;
 const genericDrawerEvidence = [
   /function methodBucket\(\)\{return state\.methods\?\.\[\$\('methodKind'\)\.value\]\|\|\[\]\}/,
@@ -67,9 +68,12 @@ const genericDrawerEvidence = [
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cweb-official-interface-audit-'));
 const errors = [];
 try {
-  const usedRequests = new Set([...literalMethods(source.app), ...literalMethods(source.mcp), ...capabilityMethods]);
+  const usedRequests = new Set([...literalMethods(source.app), ...literalMethods(source.mcp), ...capabilityMethods, ...experimentalCapabilityMethods]);
   for (const [method, text, pattern] of callEvidence) if (!pattern.test(text)) errors.push(`missing call-site evidence: ${method}`);
   if (!capabilityEvidence.test(source.app)) errors.push('missing call-site evidence: capability inventory loop');
+  if (!source.app.includes("method!=='plugin/list'||Boolean(state.meta?.capabilities?.experimentalApi)")) errors.push('under-development Plugin inventory is not gated by experimental mode');
+  if (!source.app.includes("method:'plugin/list',experimental:true")) errors.push('under-development Plugin inventory is not marked experimental');
+  if (!source.server.includes('EXPERIMENTAL_ONLY_CLIENT_REQUESTS') || !source.server.includes("'EXPERIMENTAL_METHOD_DISABLED'")) errors.push('under-development Plugin method is not blocked in stable mode');
   for (const pattern of genericDrawerEvidence) if (!pattern.test(source.app)) errors.push(`schema-driven Official APIs drawer evidence is missing: ${pattern}`);
   if (SERVER_NOTIFICATION_FALLBACK !== 'official-event-log') errors.push('official ServerNotification fallback disposition is not sealed');
   if (!/if\(e\.type==='notification'\)\{recordOfficialNotification\(e\.payload\);appendLive\(e\.payload\)\}/.test(source.app)) errors.push('official notifications are not recorded before specialized live handling');
@@ -94,7 +98,10 @@ try {
     const itemFile = path.join(dir, 'v2', 'ThreadItem.ts');
     const officialItems = typeLiterals(fs.readFileSync(itemFile, 'utf8'));
 
-    assertSubset(label === 'stable' ? new Set([...usedRequests].filter((method) => !stableOptionalRequests.has(method))) : usedRequests, requests, `${label} official ClientRequest missing`, errors);
+    const expectedRequests = label === 'stable'
+      ? new Set([...usedRequests].filter((method) => !stableOptionalRequests.has(method) && !experimentalCapabilityMethods.includes(method)))
+      : usedRequests;
+    assertSubset(expectedRequests, requests, `${label} official ClientRequest missing`, errors);
     assertSubset(allDeclaredDeltaNotifications, serverNotifications, `${label} official ServerNotification missing`, errors);
     assertSubset(new Set([...Object.keys(SERVER_REQUEST_SUPPORT)].filter((method) => !(label === 'stable' && stableOptionalServerRequests.has(method)))), serverRequests, `${label} stale ServerRequest disposition`, errors);
     assertSubset(new Set([...serverRequests].filter((method) => !(label === 'stable' && stableOptionalServerRequests.has(method)))), new Set(Object.keys(SERVER_REQUEST_SUPPORT)), `${label} undisposed ServerRequest`, errors);
@@ -110,6 +117,11 @@ try {
     }
     for (const method of capabilityMethods) {
       if (!requests.has(method)) errors.push(`${label} capability inventory is unavailable through the official ClientRequest schema: ${method}`);
+    }
+    if (experimental) {
+      for (const method of experimentalCapabilityMethods) {
+        if (!requests.has(method)) errors.push(`${label} experimental capability inventory is unavailable through the official ClientRequest schema: ${method}`);
+      }
     }
     for (const method of ['mcpServerStatus/list', 'mcpServer/resource/read', 'mcpServer/tool/call']) {
       if (!requests.has(method)) errors.push(`${label} MCP Apps official RPC missing: ${method}`);

@@ -308,6 +308,11 @@ const CODING_PROFILE_DENY = [
   /^remoteControl\//,
 ];
 const ADMIN_PROFILE_DENY = [/^command\/exec(?:\/|$)/];
+// The official schema currently exports plugin/list in both modes, but the
+// upstream App Server documentation labels the Plugin surface as under
+// development. Keep it out of the stable Web client while preserving it in
+// the explicitly experimental protocol profile.
+const EXPERIMENTAL_ONLY_CLIENT_REQUESTS = new Set(['plugin/list']);
 
 function methodRisk(method) {
   const name = String(method || '');
@@ -327,7 +332,16 @@ function accessAllows(method) {
 }
 
 function methodAllowed(method) {
-  return accessAllows(method) && (controlState.webWriteEnabled || methodRisk(method) === 'read');
+  return (config.experimental || !EXPERIMENTAL_ONLY_CLIENT_REQUESTS.has(method))
+    && accessAllows(method) && (controlState.webWriteEnabled || methodRisk(method) === 'read');
+}
+
+function rejectExperimentalMethod(res, method) {
+  return json(res, 403, {
+    error: 'EXPERIMENTAL_METHOD_DISABLED',
+    message: '该官方接口仍在开发中；稳定模式不会调用它，请开启 CWEB_EXPERIMENTAL=1。',
+    method,
+  });
 }
 
 function rejectWebWrite(res, method) {
@@ -541,7 +555,7 @@ function authenticated(req) { return !config.requireAuth || sessions.has(parseCo
 function requireAuth(req, res) { if (authenticated(req)) return true; json(res, 401, { error: 'AUTH_REQUIRED' }); return false; }
 function requireOrigin(req, res) { if (sameOrigin(req, config.publicOrigin)) return true; json(res, 403, { error: 'ORIGIN_REJECTED' }); return false; }
 function clientAddress(req) { return req.socket.remoteAddress || 'unknown'; }
-function methodSummary(item) { return { method: item.method, title: item.title, description: item.description, paramsRef: item.paramsRef, managed: item.method === 'initialize' || item.method === 'initialized', risk: methodRisk(item.method), allowed: methodAllowed(item.method) }; }
+function methodSummary(item) { return { method: item.method, title: item.title, description: item.description, paramsRef: item.paramsRef, managed: item.method === 'initialize' || item.method === 'initialized', risk: methodRisk(item.method), experimentalOnly: EXPERIMENTAL_ONLY_CLIENT_REQUESTS.has(item.method), allowed: methodAllowed(item.method) }; }
 
 function requestDisconnectSignal(req, res) {
   const controller = new AbortController();
@@ -563,7 +577,7 @@ function serveStatic(req, res, pathname) {
   let stat;
   try { stat = fs.statSync(target); } catch { return false; }
   if (!stat.isFile()) return false;
-  const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json; charset=utf-8' };
+  const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json; charset=utf-8' };
   res.writeHead(200, secureHeaders({ 'Content-Type': types[path.extname(target)] || 'application/octet-stream', 'Content-Length': stat.size, 'Cache-Control': 'no-store' }));
   fs.createReadStream(target).pipe(res);
   return true;
@@ -739,6 +753,7 @@ async function api(req, res, url) {
     const descriptor = registry.getRequest(body.method);
     if (!descriptor) return json(res, 400, { error: 'METHOD_NOT_IN_OFFICIAL_SCHEMA', method: body.method });
     if (body.method === 'initialize') return json(res, 400, { error: 'INITIALIZE_IS_MANAGED_BY_GATEWAY' });
+    if (!config.experimental && EXPERIMENTAL_ONLY_CLIENT_REQUESTS.has(body.method)) return rejectExperimentalMethod(res, body.method);
     if (!methodAllowed(body.method)) {
       if (!controlState.webWriteEnabled && methodRisk(body.method) !== 'read') return rejectWebWrite(res, body.method);
       return json(res, 403, { error: 'METHOD_BLOCKED_BY_ACCESS_PROFILE', method: body.method, profile: config.accessProfile });

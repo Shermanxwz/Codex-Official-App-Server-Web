@@ -23,6 +23,14 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   const liveActivity = fs.readFileSync(path.join(root, 'public/live-activity.js'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'public/styles.css'), 'utf8');
   const protocol = fs.readFileSync(path.join(root, 'public/protocol-support.js'), 'utf8');
+  assert.ok(fs.statSync(path.join(root, 'public/favicon.png')).size > 0);
+  assert.match(html, /<link rel="icon" href="\/favicon\.png" type="image\/png"/);
+  assert.match(html, /<link rel="apple-touch-icon" href="\/favicon\.png">/);
+  assert.equal((html.match(/class="brand-image"/g) || []).length, 3);
+  assert.doesNotMatch(html, /<svg\b/);
+  assert.doesNotMatch(html, /favicon\.svg/);
+  assert.match(css, /\.brand-mark,.empty-logo\{background:transparent;overflow:visible\}/);
+  assert.match(css, /\.brand-image\{object-fit:contain;border-radius:0\}/);
   assert.doesNotMatch(html, /id="workspaceButton"/);
   assert.match(html, /id="attachButton"/);
   assert.match(html, /id="attachmentInput"[^>]+accept="image\//);
@@ -37,6 +45,7 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /function loadMethodSchema/);
   assert.match(app, /mcpServerStatus\/list/);
   assert.match(app, /plugin\/list/);
+  assert.match(app, /method!==['"]plugin\/list['"]\|\|Boolean\(state\.meta\?\.capabilities\?\.experimentalApi\)/);
   assert.match(app, /config\/read/);
   assert.match(app, /config\/batchWrite/);
   assert.match(app, /model_reasoning_effort/);
@@ -82,6 +91,8 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /contextUsageSnapshot/);
   assert.match(app, /tokenUsageThreadId/);
   assert.match(app, /function createWorkGroup/);
+  assert.match(app, /function isCountedWorkItem/);
+  assert.match(app, /rendered\.filter\(isCountedWorkItem\)\.length\+pending\.filter\(isCountedWorkItem\)\.length/);
   assert.match(app, /function showContextCompaction/);
   assert.match(app, /function preserveLiveTimeline/);
   assert.match(app, /function removeIgnoredProtocolEvents/);
@@ -170,6 +181,18 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /approvalPolicy='never'/);
   assert.match(app, /danger-full-access/);
   assert.match(app, /function goHome/);
+  assert.match(app, /homeView:false/);
+  assert.match(app, /function invalidateThreadSelection/);
+  assert.match(app, /clearSelectedThread\(threadId,\{preserveLastThread:true\}\)/);
+  assert.match(app, /function clearSelectedThread\(threadId,\{preserveLastThread=false\}=\{\}\)/);
+  assert.match(app, /if\(state\.homeView\|\|!state\.currentThread\?\.id\)return/);
+  assert.match(app, /loadModelsBeforeInitialRestore/);
+  assert.match(app, /resyncAuthoritativeStateBeforeInitialRestore/);
+  assert.match(app, /afterLoginBeforeInitialRestore/);
+  assert.match(app, /scheduleTurnReconciliation/);
+  assert.match(app, /queueTerminalThreadRefresh\(threadKey\)/);
+  assert.match(app, /queueTerminalThreadRefresh\(threadId,\{allowActive:true\}\)/);
+  assert.match(app, /turns\/list',\{threadId,limit:3,sortDirection:'desc',itemsView:'notLoaded'\},\{timeoutMs:8_000\}/);
   assert.doesNotMatch(app, /desktopWriteProtection|controlDesktopGuardEnabled|桌面占用保护|Desktop ownership guard/);
   assert.doesNotMatch(html, /desktopGuardToggle|desktopGuardState|桌面占用保护/);
   assert.match(app, /eventReconnectWatchdog/);
@@ -179,6 +202,9 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /CWEB_HTTP_TIMEOUT/);
   assert.match(app, /queueTerminalThreadRefresh/);
   assert.match(app, /reconcileExternalOfficialActivity/);
+  assert.match(app, /visibleRunningTurnId/);
+  assert.match(app, /turns\/list',\{threadId,limit:6,sortDirection:'desc',itemsView:'notLoaded'\},\{timeoutMs:8_000\}/);
+  assert.match(app, /SEALED_TERMINAL_TURN_STATUSES\.has\(statusKey\(turn\?\.status\)\)/);
   assert.match(app, /capabilityReadInFlight/);
   assert.match(app, /siblingController/);
   assert.match(css, /\.history-older-control/);
@@ -269,6 +295,11 @@ test('published support summary advertises only implemented archive hosts', () =
 test('runtime server advertises the implemented MCP Apps profile and gates Dynamic Tools experimentally', () => {
   const server = fs.readFileSync(path.join(root, 'src/server.mjs'), 'utf8');
   const config = fs.readFileSync(path.join(root, 'src/config.mjs'), 'utf8');
+  const officialService = fs.readFileSync(path.join(root, 'deploy', 'codex-official-app-server.service'), 'utf8');
+  assert.equal(fs.existsSync(path.join(root, 'src', 'local-browser-mcp.mjs')), false);
+  assert.equal(fs.existsSync(path.join(root, 'test', 'local-browser-mcp.test.mjs')), false);
+  assert.doesNotMatch(officialService, /mcp_servers\./);
+  assert.match(officialService, /app-server --listen/);
   assert.match(server, /MCP_APPS_EXTENSION/);
   assert.match(server, /mimeTypes:\s*\[MCP_APPS_MIME\]/);
   assert.match(server, /TURN_START_DEDUPE_TTL_MS/);
@@ -283,6 +314,8 @@ test('runtime server advertises the implemented MCP Apps profile and gates Dynam
   assert.match(server, /autonomousExecutionEnabled/);
   assert.match(server, /danger-full-access/);
   assert.match(config, /autonomousMode:\s*bool\('CWEB_AUTONOMOUS_MODE'/);
+  assert.match(server, /EXPERIMENTAL_ONLY_CLIENT_REQUESTS/);
+  assert.match(server, /EXPERIMENTAL_METHOD_DISABLED/);
   assert.match(server, /properties\?\.dynamicTools/);
   assert.match(server, /message\.method === 'currentTime\/read'/);
   assert.match(server, /function rejectDynamicToolRequest/);
