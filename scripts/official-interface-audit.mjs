@@ -58,6 +58,7 @@ const callEvidence = [
 // `rpc('method', ...)` calls. Keep them in the same official-schema gate.
 const capabilityMethods = ['mcpServerStatus/list', 'skills/list', 'app/installed'];
 const experimentalCapabilityMethods = ['plugin/list'];
+const experimentalOnlyMethods = ['plugin/list', 'plugin/read', 'plugin/install', 'plugin/uninstall'];
 const capabilityEvidence = /const specs=\[\['mcpServerStatus\/list',mcpCapabilityGroup\],\['skills\/list',skillsCapabilityGroup\],\['plugin\/list',pluginCapabilityGroup\],\['app\/installed',appCapabilityGroup\]\]/;
 const genericDrawerEvidence = [
   /function methodBucket\(\)\{return state\.methods\?\.\[\$\('methodKind'\)\.value\]\|\|\[\]\}/,
@@ -73,7 +74,7 @@ try {
   if (!capabilityEvidence.test(source.app)) errors.push('missing call-site evidence: capability inventory loop');
   if (!source.app.includes("method!=='plugin/list'||Boolean(state.meta?.capabilities?.experimentalApi)")) errors.push('under-development Plugin inventory is not gated by experimental mode');
   if (!source.app.includes("method:'plugin/list',experimental:true")) errors.push('under-development Plugin inventory is not marked experimental');
-  if (!source.server.includes('EXPERIMENTAL_ONLY_CLIENT_REQUESTS') || !source.server.includes("'EXPERIMENTAL_METHOD_DISABLED'")) errors.push('under-development Plugin method is not blocked in stable mode');
+  if (!source.server.includes('EXPERIMENTAL_ONLY_CLIENT_REQUESTS') || !source.server.includes("'EXPERIMENTAL_METHOD_DISABLED'") || !experimentalOnlyMethods.every((method) => source.server.includes(`'${method}'`))) errors.push('under-development Plugin surface is not blocked in stable mode');
   for (const pattern of genericDrawerEvidence) if (!pattern.test(source.app)) errors.push(`schema-driven Official APIs drawer evidence is missing: ${pattern}`);
   if (SERVER_NOTIFICATION_FALLBACK !== 'official-event-log') errors.push('official ServerNotification fallback disposition is not sealed');
   if (!/if\(e\.type==='notification'\)\{recordOfficialNotification\(e\.payload\);appendLive\(e\.payload\)\}/.test(source.app)) errors.push('official notifications are not recorded before specialized live handling');

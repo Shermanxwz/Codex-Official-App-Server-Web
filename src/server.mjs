@@ -308,11 +308,11 @@ const CODING_PROFILE_DENY = [
   /^remoteControl\//,
 ];
 const ADMIN_PROFILE_DENY = [/^command\/exec(?:\/|$)/];
-// The official schema currently exports plugin/list in both modes, but the
-// upstream App Server documentation labels the Plugin surface as under
-// development. Keep it out of the stable Web client while preserving it in
-// the explicitly experimental protocol profile.
-const EXPERIMENTAL_ONLY_CLIENT_REQUESTS = new Set(['plugin/list']);
+// The official App Server documentation labels the Plugin inventory and
+// lifecycle surface as under development. Keep all four methods out of the
+// stable Web client while preserving them in the explicitly experimental
+// protocol profile.
+const EXPERIMENTAL_ONLY_CLIENT_REQUESTS = new Set(['plugin/list','plugin/read','plugin/install','plugin/uninstall']);
 
 function methodRisk(method) {
   const name = String(method || '');

@@ -92,10 +92,15 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /tokenUsageThreadId/);
   assert.match(app, /function createWorkGroup/);
   assert.match(app, /function isCountedWorkItem/);
+  assert.match(app, /function pruneEmptyWorkGroups/);
   assert.match(app, /rendered\.filter\(isCountedWorkItem\)\.length\+pending\.filter\(isCountedWorkItem\)\.length/);
   assert.match(app, /function showContextCompaction/);
   assert.match(app, /function preserveLiveTimeline/);
   assert.match(app, /function removeIgnoredProtocolEvents/);
+  assert.match(app, /hook\/started/);
+  assert.match(app, /hook\/completed/);
+  assert.match(app, /scheduleTurnReconciliation\(7_000\)/);
+  assert.match(app, /externalActivityReconcileMisses/);
   assert.match(app, /threadCache:new Map/);
   assert.match(app, /function cachedThreadResponse/);
   assert.match(app, /function renderHistoryBatches/);
@@ -316,6 +321,7 @@ test('runtime server advertises the implemented MCP Apps profile and gates Dynam
   assert.match(config, /autonomousMode:\s*bool\('CWEB_AUTONOMOUS_MODE'/);
   assert.match(server, /EXPERIMENTAL_ONLY_CLIENT_REQUESTS/);
   assert.match(server, /EXPERIMENTAL_METHOD_DISABLED/);
+  assert.match(server, /new Set\(\['plugin\/list','plugin\/read','plugin\/install','plugin\/uninstall'\]\)/);
   assert.match(server, /properties\?\.dynamicTools/);
   assert.match(server, /message\.method === 'currentTime\/read'/);
   assert.match(server, /function rejectDynamicToolRequest/);
