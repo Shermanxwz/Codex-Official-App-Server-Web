@@ -183,7 +183,7 @@ try {
     ]) {
       try { await client.request(method, params); }
       catch (error) {
-        if (!/not materialized yet|before first user message/i.test(String(error?.message || ''))) throw error;
+        if (!/not materialized yet|not supported yet|before first user message/i.test(String(error?.message || ''))) throw error;
       }
     }
   }

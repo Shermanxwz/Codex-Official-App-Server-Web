@@ -74,6 +74,8 @@ if(!service.includes('EnvironmentFile=__ENV_FILE__'))failures.push('systemd unit
 const config=fs.readFileSync(path.join(root,'src/config.mjs'),'utf8');
 for(const needle of ["CWEB_CODEX_TRANSPORT",'codexServerUrl','websocket',"CWEB_AUTONOMOUS_MODE",'autonomousMode'])if(!config.includes(needle))failures.push(`transport/autonomy configuration missing: ${needle}`);
 if(/echo[^\n]*\$TOKEN/.test(installer))failures.push('installer must not print the access token');
+const runtimeSmoke=fs.readFileSync(path.join(root,'scripts/runtime-smoke.mjs'),'utf8');
+if(!/not materialized yet|not supported yet|before first user message/i.test(runtimeSmoke))failures.push('runtime smoke must accept official fresh-history lifecycle errors');
 const app=fs.readFileSync(path.join(root,'public/app.js'),'utf8');
 for(const needle of ["thread/loaded/list","thread/resume","model/list","supportedReasoningEfforts","resyncAuthoritativeState","serverRequestsCleared",'eventLastMessageAt','halfOpen','DEFAULT_API_TIMEOUT_MS','CWEB_HTTP_TIMEOUT','queueTerminalThreadRefresh','reconcileExternalOfficialActivity','historyPagingAvailable','historyThreadPagingAvailable','historyMode','disableExperimentalHistory','stableHistoryReload','isUnsupportedOfficialMethodError','autonomousMode','approvalPolicy','danger-full-access','function goHome'])if(!app.includes(needle))failures.push(`native UI archive/autonomy behavior missing: ${needle}`);
 for(const needle of ['homeButton','homeButtonTop','autonomousToggle'])if(!index.includes(needle))failures.push(`navigation/autonomy UI missing: ${needle}`);
