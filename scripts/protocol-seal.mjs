@@ -3,7 +3,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { OfficialSchemaRegistry } from '../src/schema-registry.mjs';
 import {
-  SERVER_NOTIFICATION_FALLBACK, SERVER_REQUEST_SUPPORT, THREAD_ITEM_TYPES, protocolSupportSummary,
+  SERVER_NOTIFICATION_DIAGNOSTIC_ONLY,
+  SERVER_NOTIFICATION_FALLBACK,
+  SERVER_NOTIFICATION_TIMELINE_DEFAULT,
+  SERVER_REQUEST_SUPPORT,
+  THREAD_ITEM_TYPES,
+  protocolSupportSummary,
+  serverNotificationDisposition,
+  timelineNotificationKind,
 } from '../public/protocol-support.js';
 
 const supportedItems = new Set(THREAD_ITEM_TYPES);
@@ -19,7 +26,9 @@ const ARCHIVE_BASELINE_COUNTS = Object.freeze({
   experimental: { clientRequests: 153, clientNotifications: 1, serverRequests: 11, serverNotifications: 79, threadItems: 18 },
 });
 const ARCHIVE_EXPERIMENTAL_REQUESTS = ['mcpServer/event/stream/start', 'mcpServer/event/stream/stop', 'thread/timeline/list'];
+const TERMINAL_INTERACTION_NOTIFICATION = 'item/commandExecution/terminalInteraction';
 const ARCHIVE_SERVER_NOTIFICATIONS = [
+  TERMINAL_INTERACTION_NOTIFICATION,
   'mcpServer/event/stream/notification',
   'thread/realtime/item/completed',
   'thread/realtime/item/started',
@@ -50,6 +59,23 @@ function sealMode(experimental) {
   const officialServerNotifications = registry.serverNotifications.map((item) => item.method);
   if (!officialServerNotifications.length) throw new Error(`Official ${label} protocol exports no ServerNotification methods`);
   if (SERVER_NOTIFICATION_FALLBACK !== 'official-event-log') throw new Error('Every official ServerNotification must retain the bounded official-event-log fallback');
+  if (SERVER_NOTIFICATION_TIMELINE_DEFAULT !== 'official-event-log-only') throw new Error('Unknown ServerNotifications must fail closed at the human timeline boundary');
+  if (timelineNotificationKind('future/schemaKnownNotification') !== 'ignore') throw new Error('Future ServerNotifications must not reach the raw timeline fallback');
+
+  const allowedNotificationDispositions = new Set(['timeline-delta', 'specialized-ui', SERVER_NOTIFICATION_TIMELINE_DEFAULT]);
+  const notificationDispositionCounts = { timelineDelta: 0, specializedUi: 0, officialEventLogOnly: 0 };
+  for (const method of officialServerNotifications) {
+    const disposition = serverNotificationDisposition(method);
+    if (!allowedNotificationDispositions.has(disposition)) throw new Error(`Unsupported ServerNotification disposition ${disposition} for ${method}`);
+    if (disposition === 'timeline-delta') notificationDispositionCounts.timelineDelta += 1;
+    else if (disposition === 'specialized-ui') notificationDispositionCounts.specializedUi += 1;
+    else notificationDispositionCounts.officialEventLogOnly += 1;
+  }
+  if (registry.getServerNotification(TERMINAL_INTERACTION_NOTIFICATION)
+    && serverNotificationDisposition(TERMINAL_INTERACTION_NOTIFICATION) !== SERVER_NOTIFICATION_TIMELINE_DEFAULT) {
+    throw new Error(`${TERMINAL_INTERACTION_NOTIFICATION} must remain diagnostic-only and never create a timeline work item`);
+  }
+
   const missingMcp = MCP_REQUIRED.filter((method) => !registry.getRequest(method));
   if (missingMcp.length) throw new Error(`Official ${label} protocol is missing MCP Apps Host RPCs: ${missingMcp.join(', ')}`);
   if (experimental) {
@@ -77,6 +103,9 @@ function sealMode(experimental) {
     clientRequests: registry.requests.length, clientNotifications: registry.notifications.length,
     serverNotifications: officialServerNotifications.length,
     serverNotificationFallback: SERVER_NOTIFICATION_FALLBACK,
+    serverNotificationTimelineDefault: SERVER_NOTIFICATION_TIMELINE_DEFAULT,
+    notificationDispositionCounts,
+    terminalInteractionDiagnosticOnly: serverNotificationDisposition(TERMINAL_INTERACTION_NOTIFICATION) === SERVER_NOTIFICATION_TIMELINE_DEFAULT,
     mcpAppsRpcSurface: MCP_REQUIRED,
     dynamicToolsField: Boolean(registry.getRequest('thread/start')?.paramsSchema?.properties?.dynamicTools),
     archiveBaselineExactCounts: registry.version === ARCHIVE_BASELINE_VERSION,
@@ -87,8 +116,17 @@ try {
   for (const [method, disposition] of Object.entries(SERVER_REQUEST_SUPPORT)) {
     if (!(String(disposition).startsWith('native') || ['manual-tool-host', 'platform-only'].includes(disposition))) throw new Error(`Unsupported ServerRequest disposition ${disposition} for ${method}`);
   }
+  if (!SERVER_NOTIFICATION_DIAGNOSTIC_ONLY.includes(TERMINAL_INTERACTION_NOTIFICATION)) throw new Error('Terminal interaction diagnostic-only disposition is not explicitly sealed');
+  if (timelineNotificationKind(TERMINAL_INTERACTION_NOTIFICATION) !== 'ignore') throw new Error('Terminal interaction can reach the raw timeline fallback');
   const sealed = modes.map(sealMode), summary = protocolSupportSummary();
-  if (!summary.mcpAppsHost || !summary.dynamicToolHost || !summary.currentTimeHost || !summary.experimentalProtocolSeal || summary.serverNotificationFallback !== SERVER_NOTIFICATION_FALLBACK) throw new Error('Archive host capability summary is incomplete');
+  if (!summary.mcpAppsHost
+    || !summary.dynamicToolHost
+    || !summary.currentTimeHost
+    || !summary.experimentalProtocolSeal
+    || summary.serverNotificationFallback !== SERVER_NOTIFICATION_FALLBACK
+    || summary.serverNotificationTimelineDefault !== SERVER_NOTIFICATION_TIMELINE_DEFAULT) {
+    throw new Error('Archive host capability summary is incomplete');
+  }
   console.log(JSON.stringify({ requestedMode, sealed, declaredThreadItems: THREAD_ITEM_TYPES.length, declaredServerRequests: Object.keys(SERVER_REQUEST_SUPPORT).length, ...summary }, null, 2));
   console.log(`PROTOCOL_DISPOSITION_SEALED_${requestedMode.toUpperCase()}`);
 } finally { fs.rmSync(root, { recursive: true, force: true }); }
