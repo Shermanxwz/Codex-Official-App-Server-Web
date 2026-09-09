@@ -40,7 +40,9 @@ The human-facing Web surface includes official image input, an inventory summary
 
 Server-initiated requests require an explicit disposition. Unknown official evolution is fail-closed. Platform-only token refresh and attestation are rejected instead of emulated.
 
-Every schema-admitted server notification is observable through the bounded Official Events log before first-class timeline/state handling. This universal fallback is an observability disposition, not a claim that every transport/process event belongs in the conversation timeline.
+Every schema-admitted server notification is observable through the bounded Official Events log before first-class timeline/state handling. This universal fallback is an observability disposition, not a claim that every transport/process event belongs in the conversation timeline. The human timeline has a second, stricter fail-closed boundary: only declared first-class item lifecycle, stream delta, state, or notice handlers may affect it; any other current or future ServerNotification is `official-event-log-only` before the raw compatibility fallback. Carrying `turnId` or `itemId` never grants timeline visibility. The archive explicitly seals `item/commandExecution/terminalInteraction` in this diagnostic-only class so repeated process polling cannot create duplicate-looking work rows.
+
+A new official ThreadItem or ServerRequest without an explicit disposition invalidates the protocol seal. A new ordinary ServerNotification does not fabricate UI: it remains observable, defaults to diagnostic-only timeline routing, and can become human-facing only after an explicit code and test disposition is added.
 
 ## Host rule
 
