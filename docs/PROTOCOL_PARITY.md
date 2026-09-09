@@ -12,6 +12,8 @@ All exported stable ClientRequest/ClientNotification methods are schema-gated. `
 
 Every exported ServerNotification has a universal `official-event-log` disposition before any specialized handler runs. The observer retains at most 200 complete entries and 1 MiB, replaces an individual payload above 128 KiB with method/size metadata, and is cleared explicitly by the operator or on page reload. Conversation rendering remains intentionally narrower so process, realtime and MCP event-stream notifications are observable without being misrepresented as chat messages.
 
+The human timeline is fail-closed independently from protocol observability. A notification may mutate an existing first-class item only through an explicitly declared delta/specialized handler. Any schema-admitted notification without such a handler resolves to `official-event-log-only` at the timeline routing checkpoint, even when it carries `threadId`, `turnId`, or `itemId`; it cannot fall through to the compatibility `.system-event` renderer. `item/commandExecution/terminalInteraction` is explicitly sealed in this diagnostic-only class: repeated terminal polling/interactions remain visible in Official Events but never create standalone work-process rows. The same default applies to future ServerNotification methods until a deliberate UI disposition is added.
+
 The first-class timeline has an explicit disposition for every sealed official ThreadItem variant: `userMessage`, `hookPrompt`, `agentMessage`, `plan`, `reasoning`, `commandExecution`, `fileChange`, `mcpToolCall`, `dynamicToolCall`, `collabAgentToolCall`, `subAgentActivity`, `webSearch`, `imageView`, `sleep`, `imageGeneration`, `enteredReviewMode`, `exitedReviewMode`, `contextCompaction`, `functionCallOutput`. The forward-compatible `functionCallOutput` variant uses the bounded generic work-process renderer so its official payload remains observable without assuming a version-specific shape.
 
 ## ServerRequest dispositions
@@ -42,9 +44,15 @@ New Web threads select `historyMode:'paginated'` when the experimental history s
 
 For the exact 0.150.1 archive, the seal also requires the new experimental `thread/timeline/list`, `mcpServer/event/stream/start`, and `mcpServer/event/stream/stop` requests, plus the MCP event-stream and realtime item/transcript ServerNotifications. These less-common requests are callable through the schema-driven Official APIs drawer; their notifications enter the universal bounded observer without being misrepresented as ordinary chat content.
 
+## Notification routing closure
+
+The timeline routing table is a compatibility adapter for the existing `app.js` property lookup, not a notification blacklist. It has three outcomes: known stream deltas update an existing item, explicitly admitted specialized methods continue to their state/notice handler, and every other method returns `ignore` before the raw fallback. The protocol seal exercises the generated official ServerNotification surface plus a synthetic future method and requires all dispositions to be one of `timeline-delta`, `specialized-ui`, or `official-event-log-only`.
+
+`optOutNotificationMethods` is not used as the correctness boundary. An operator may deliberately suppress exact upstream methods through the existing opt-out control, but the Web UI remains safe when no notification is opted out: observability is retained and unknown notification evolution cannot become conversation content.
+
 ## Drift behavior
 
-Pinned stable and pinned experimental jobs are blocking archive checks. A latest-version job runs both modes as an advisory canary. New official ThreadItem or ServerRequest surface without a declared disposition makes the corresponding protocol seal fail instead of silently degrading; all schema-admitted new ServerNotifications remain observable through the bounded universal fallback.
+Pinned stable and pinned experimental jobs are blocking archive checks. A latest-version job runs both modes as an advisory canary. New official ThreadItem or ServerRequest surface without a declared disposition makes the corresponding protocol seal fail instead of silently degrading. New ServerNotification surface remains observable through the bounded universal fallback and is timeline-safe by default; a new human-facing behavior requires an explicit specialized/delta disposition before it can affect conversation rendering.
 
 ## Outside the parity boundary
 
