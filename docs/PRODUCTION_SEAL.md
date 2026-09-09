@@ -43,7 +43,10 @@
 - the repository-wide official-interface audit proves every browser RPC/notification, server-request disposition and rendered ThreadItem belongs to the generated Stable/Experimental contract;
 - Stable and Experimental ServerRequest/ThreadItem dispositions are sealed separately;
 - every schema-admitted ServerNotification is written to a bounded, size-capped Official Events observer before specialized state/timeline handling; oversized payloads retain method identity and byte size without retaining the body;
-- the default handshake opts out of no official notifications; explicit `CWEB_NOTIFICATION_OPT_OUT` remains available for an operator who deliberately accepts reduced observability;
+- the human timeline is independently fail-closed: only declared item lifecycle, delta, state, and notice handlers may affect it; every other current or future ServerNotification resolves to `official-event-log-only` before the compatibility raw-event fallback, even when it carries `threadId`, `turnId`, or `itemId`;
+- `item/commandExecution/terminalInteraction` is sealed as diagnostic-only transport/process activity: repeated notifications stay observable in Official Events and never create standalone work-process rows;
+- a delta that has no valid target cannot fabricate a raw method card; it is ignored or retained only by the existing bounded item-delta mechanism according to its declared kind;
+- the default handshake opts out of no official notifications; explicit `CWEB_NOTIFICATION_OPT_OUT` remains available for an operator who deliberately accepts reduced observability, but opt-out is never the UI correctness boundary;
 - MCP Apps is advertised only when required official MCP proxy methods are present;
 - configured Dynamic Tools require experimental mode and an official experimental `thread/start.dynamicTools` schema field.
 
