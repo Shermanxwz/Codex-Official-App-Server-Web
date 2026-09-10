@@ -300,6 +300,24 @@
     </form>
   </div>
 
+  <div id="accountUsageModal" class="modal hidden" role="dialog" aria-modal="true" aria-hidden="true">
+    <section class="modal-card account-usage-card" aria-labelledby="accountUsageTitle">
+      <div class="modal-head">
+        <div>
+          <h2 id="accountUsageTitle" data-i18n="accountUsageTitle">使用情况和计费</h2>
+          <p class="muted" data-i18n="accountUsageSubtitle">读取官方账户、Codex 额度和令牌用量</p>
+        </div>
+        <button id="closeAccountUsage" class="icon-button" type="button" aria-label="关闭">×</button>
+      </div>
+      <div id="accountUsageStatus" class="account-usage-status" role="status" aria-live="polite"></div>
+      <div id="accountUsageBody" class="account-usage-body"></div>
+      <div class="account-usage-actions">
+        <button id="refreshAccountUsage" class="secondary-button" type="button" data-i18n="accountUsageRefresh">刷新官方数据</button>
+        <a id="officialBillingLink" class="secondary-button account-billing-link" href="https://chatgpt.com/#settings/Account" target="_blank" rel="noopener noreferrer" data-i18n="accountBillingSettings">打开官方用量和账单设置</a>
+      </div>
+    </section>
+  </div>
+
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
 
   <script type="module" src="/app.js"></script>

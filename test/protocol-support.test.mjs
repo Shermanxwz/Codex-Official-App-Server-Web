@@ -66,6 +66,8 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(html, /id="homeButton"/);
   assert.match(html, /id="homeButtonTop"/);
   assert.match(html, /id="autonomousToggle"/);
+  assert.match(html, /id="accountUsageModal"/);
+  assert.match(html, /id="officialBillingLink"[^>]+href="https:\/\/chatgpt\.com\/#settings\/Account"/);
   assert.match(app, /turn\/steer/);
   assert.match(app, /clientUserMessageId/);
   assert.match(app, /const request=rpc\('turn\/start'/);
@@ -188,6 +190,11 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /approvalPolicy='never'/);
   assert.match(app, /danger-full-access/);
   assert.match(app, /function goHome/);
+  assert.match(app, /composerMenuItem\('account-usage'/);
+  assert.match(app, /account\/rateLimits\/read/);
+  assert.match(app, /account\/usage\/read/);
+  assert.match(app, /function openAccountUsage/);
+  assert.match(app, /function renderAccountUsage/);
   assert.match(app, /homeView:false/);
   assert.match(app, /function invalidateThreadSelection/);
   assert.match(app, /clearSelectedThread\(threadId,\{preserveLastThread:true\}\)/);

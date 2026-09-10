@@ -109,6 +109,44 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
 @media(max-width:980px){.composer-sync-status{display:none}}
 @media(max-width:760px){.capability-group-body{max-height:240px}.imagePasteHint{display:none}.composer-hint-secondary{display:none}}
 
+/* Official account, usage, and billing hand-off.  The first two sections are
+   rendered from App Server account/* responses; payment settings stay on the
+   official ChatGPT account page. */
+.account-usage-card{width:min(700px,100%)}
+.account-usage-status{min-height:16px;margin:12px 0 8px;color:var(--muted);font-size:10px}
+.account-usage-status.error{color:var(--bad)}
+.account-usage-body{display:flex;flex-direction:column;gap:10px;max-height:min(58vh,520px);overflow:auto;padding-right:2px}
+.account-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.account-summary-card,.account-usage-section{border:1px solid var(--line);border-radius:10px;background:color-mix(in srgb,var(--soft) 38%,var(--panel));padding:10px}
+.account-summary-label,.account-usage-section-title{display:block;color:var(--muted);font-size:9px}
+.account-summary-value{display:block;margin-top:4px;font-size:13px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-summary-note{display:block;margin-top:3px;color:var(--faint);font-size:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-usage-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px}
+.account-usage-section-head small{color:var(--faint);font-size:8px}
+.account-limit-list{display:grid;gap:8px}
+.account-limit-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.account-limit-copy{min-width:0}
+.account-limit-name{display:block;font-size:10.5px;font-weight:650}
+.account-limit-meta{display:block;margin-top:3px;color:var(--muted);font-size:8.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.account-limit-percent{font-size:12px;font-weight:700;white-space:nowrap}
+.account-limit-bar{height:5px;margin-top:5px;overflow:hidden;border-radius:999px;background:var(--soft)}
+.account-limit-fill{display:block;width:0;height:100%;border-radius:inherit;background:var(--ok);transition:width .25s ease}
+.account-limit-fill.warning{background:var(--warn)}
+.account-limit-fill.danger{background:var(--bad)}
+.account-token-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.account-token-summary span{display:flex;flex-direction:column;gap:3px;min-width:0}
+.account-token-summary small{color:var(--muted);font-size:8px}
+.account-token-summary strong{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-usage-table{width:100%;border-collapse:collapse;font-size:9px}
+.account-usage-table th,.account-usage-table td{padding:6px 4px;border-top:1px solid var(--line);text-align:left}
+.account-usage-table th{color:var(--muted);font-size:8px;font-weight:600}
+.account-usage-table td:last-child,.account-usage-table th:last-child{text-align:right}
+.account-usage-empty{color:var(--muted);font-size:10px;line-height:1.5}
+.account-usage-note{margin:0;color:var(--faint);font-size:8.5px;line-height:1.4}
+.account-usage-actions{display:flex;justify-content:flex-end;gap:7px;flex-wrap:wrap;margin-top:13px}
+.account-billing-link{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+@media(max-width:560px){.account-summary-grid,.account-token-summary{grid-template-columns:1fr 1fr}.account-summary-card:last-child{grid-column:1/-1}.account-usage-card{padding:14px}.account-usage-actions{justify-content:stretch}.account-usage-actions>*{flex:1 1 180px}}
+
 /* A send whose HTTP response was lost is visibly pending instead of looking
    like a normal draft. The composer remains usable for copying/editing, but
    the send action is locked until the official runtime confirms the outcome. */
