@@ -518,8 +518,11 @@ codex.on('serverRequest', (message) => {
 
 codex.on('notification', (message) => {
   if (!registry.getServerNotification(message.method)) {
-    pushEvent('protocolMismatch', { direction: 'serverNotification', method: message.method });
-    return;
+    // Keep the schema mismatch observable for diagnostics, but let the Web
+    // client receive the bounded notification as a generic work event. This
+    // keeps newer official protocol additions forward-compatible without
+    // turning each new notification into a maintenance deny-list entry.
+    pushEvent('protocolMismatch', { direction: 'serverNotification', method: message.method, accepted: true });
   }
   observeOfficialPlanLifecycle(message);
   pushEvent('notification', message);

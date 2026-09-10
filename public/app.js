@@ -19,6 +19,8 @@ Object.assign(T.zh,{contextUsageLabel:'上下文',contextUsageUsed:'已用',cont
 Object.assign(T.en,{contextUsageLabel:'Context',contextUsageUsed:'Used',contextUsageRemaining:'Remaining',contextUsageWindow:'Limit',contextUsageUnknown:'The official runtime has not returned this model’s context limit',contextUsageSource:'Official token usage · current model',contextUsageOverLimit:'Context limit reached',contextUsageCumulative:'Thread total'});
 Object.assign(T.zh,{officialPlan:'官方计划',officialPlanProgress:'第 {current}/{total} 步',planCompleted:'已完成',planInProgress:'进行中',planPending:'待处理'});
 Object.assign(T.en,{officialPlan:'Official plan',officialPlanProgress:'Step {current}/{total}',planCompleted:'Completed',planInProgress:'In progress',planPending:'Pending'});
+Object.assign(T.zh,{composerMenuTitle:'输入菜单',composerMenuHint:'↑↓ 选择 · Enter 确认 · Esc 关闭',slashMenu:'官方命令',mentionMenu:'添加到会话',composerNoResults:'没有匹配的官方能力',composerFiles:'文件和文件夹',composerFilesHint:'使用官方文件搜索选择工作区路径',composerGoal:'目标',composerGoalHint:'读取或设置当前会话目标',composerPlanMode:'计划模式',composerPlanModeHint:'使用官方协作模式进入计划模式',composerMcp:'MCP',composerMcpHint:'查看官方 MCP 服务状态',composerSkills:'技能',composerSkillsHint:'查看当前工作区技能',composerPlugins:'插件',composerPluginsHint:'查看已安装插件',composerApps:'已安装 App',composerAppsHint:'查看可用 App',composerApis:'官方接口',composerApisHint:'打开官方方法与事件面板',composerNew:'新建会话',composerNewHint:'创建一个新的官方会话',composerCompact:'压缩上下文',composerCompactHint:'调用官方上下文压缩',composerArchive:'归档当前会话',composerArchiveHint:'调用官方归档接口',composerReload:'刷新当前会话',composerReloadHint:'重新读取官方会话状态',composerFileQuery:'搜索工作区文件或文件夹',composerGoalPrompt:'输入当前会话目标（留空可清除）',composerGoalSaved:'会话目标已更新',composerPlanEnabled:'已切换到官方计划模式',composerMentionUnavailable:'当前官方版本未提供此菜单能力',composerFileSearchUnavailable:'当前官方版本未提供文件搜索',composerFileSearchEmpty:'输入文件名开始搜索',composerPluginMention:'插入插件/能力引用',composerSelectedFile:'已添加文件引用',protocolWorkEvent:'工作事件',protocolWorkEventDetails:'查看协议详情',protocolWorkEventCount:'次',protocolWorkUnknown:'其他官方工作事件',protocolWorkSummary:'已收纳到工作过程'});
+Object.assign(T.en,{composerMenuTitle:'Composer menu',composerMenuHint:'↑↓ select · Enter confirm · Esc close',slashMenu:'Official commands',mentionMenu:'Add to thread',composerNoResults:'No matching official capability',composerFiles:'Files and folders',composerFilesHint:'Use the official file search for workspace paths',composerGoal:'Goal',composerGoalHint:'Read or set the current thread goal',composerPlanMode:'Plan mode',composerPlanModeHint:'Use the official collaboration mode for planning',composerMcp:'MCP',composerMcpHint:'View official MCP service status',composerSkills:'Skills',composerSkillsHint:'View skills in the current workspace',composerPlugins:'Plugins',composerPluginsHint:'View installed plugins',composerApps:'Installed Apps',composerAppsHint:'View available Apps',composerApis:'Official APIs',composerApisHint:'Open official methods and events',composerNew:'New thread',composerNewHint:'Create a new official thread',composerCompact:'Compact context',composerCompactHint:'Call the official context compaction method',composerArchive:'Archive current thread',composerArchiveHint:'Call the official archive method',composerReload:'Reload current thread',composerReloadHint:'Reload official thread state',composerFileQuery:'Search workspace files or folders',composerGoalPrompt:'Enter a goal for this thread (blank clears it)',composerGoalSaved:'Thread goal updated',composerPlanEnabled:'Switched to official plan mode',composerMentionUnavailable:'This official version does not expose this menu capability',composerFileSearchUnavailable:'This official version does not expose file search',composerFileSearchEmpty:'Type a filename to search',composerPluginMention:'Insert a plugin/capability reference',composerSelectedFile:'File reference added',protocolWorkEvent:'Work event',protocolWorkEventDetails:'View protocol details',protocolWorkEventCount:'times',protocolWorkUnknown:'Other official work event',protocolWorkSummary:'Collected in the work process'});
 Object.assign(T.zh,{historyLoading:'正在加载会话历史…',historyLoaded:'会话历史已加载',historyFallback:'实验版历史接口不可用，已自动切换到稳定读取'});
 Object.assign(T.en,{historyLoading:'Loading thread history…',historyLoaded:'Thread history loaded',historyFallback:'Experimental history API unavailable; switched to stable history reads'});
 Object.assign(T.zh,{historyTimeout:'官方历史读取超时，请稍后重试',historySearchLoading:'正在搜索完整历史…'});
@@ -198,7 +200,7 @@ async function compactCurrentThread(){if(!state.currentThread?.id||!hasRequest('
 function findItem(id){return id?state.liveItems.get(String(id))||null:null}
 function streamTarget(node,kind){if(!node)return null;if(kind==='plan')return node.matches('[data-stream-target="plan"]')?node:null;return node.querySelector('[data-stream-target="'+CSS.escape(kind)+'"]')}
 function applyDelta(node,id,kind,delta,params={}){if(kind==='file-patch'){const t=streamTarget(node,'file');if(!t)return false;const patch=params.patch||params.diff||params.delta||delta;if(patch){let pre=t.querySelector('[data-live-patch="1"]');if(!pre){pre=el('pre','diff-output');pre.dataset.livePatch='1';t.append(pre)}pre.textContent=String(patch)}return true}const t=streamTarget(node,kind);if(!t)return false;const next=getStreamText(id,kind,t.textContent)+String(delta||'');setStreamText(id,kind,next);if(kind==='agent')t.replaceChildren(richText(next));else t.textContent=next;return true}
-function queueDelta(id,kind,delta,params={}){if(kind==='ignore'||!id)return;const key=String(id),node=findItem(key);if(node&&applyDelta(node,key,kind,delta,params))return;const q=state.pendingDeltas.get(key)||[];q.push({kind,delta:String(delta||''),params});if(q.length>256)q.splice(0,q.length-256);state.pendingDeltas.set(key,q)}
+function queueDelta(id,kind,delta,params={}){if(!id)return;const key=String(id),node=findItem(key);if(node&&applyDelta(node,key,kind,delta,params))return;const q=state.pendingDeltas.get(key)||[];q.push({kind,delta:String(delta||''),params});if(q.length>256)q.splice(0,q.length-256);state.pendingDeltas.set(key,q)}
 function notificationItemId(p){return p?.itemId||p?.item?.id||p?.id||null}
 function belongsHere(p){const id=p?.threadId||p?.thread?.id||p?.turn?.threadId;if(id)return!state.currentThread||String(id)===String(state.currentThread.id);if(!state.currentThread)return Boolean(p?.tokenUsage||p?.usage);const turnId=p?.turnId||p?.turn?.id;if(turnId){if(String(turnId)===String(state.activeTurnId))return true;if(state.currentThread.turns?.some(turn=>String(turn?.id||'')===String(turnId)))return true;return Boolean($('timeline')?.querySelector('[data-turn-id="'+CSS.escape(String(turnId))+'"]'))}const itemId=p?.itemId||p?.item?.id;if(itemId){if(state.liveItems.has(String(itemId)))return true;return Boolean(state.currentThread.turns?.some(turn=>turn?.items?.some(item=>String(item?.id||'')===String(itemId))))}return Boolean(p?.tokenUsage||p?.usage)}
 function appendLiveLegacy(message){const p=message?.params||{};if(!belongsHere(p))return;const m=message.method;if(m==='turn/diff/updated'){removeIgnoredProtocolEvents();return}if(m==='turn/plan/updated'){upsertOfficialPlan(p.turnId||p.turn?.id||state.activeTurnId,p);return}if(m==='turn/started'){state.activeTurnId=p.turn?.id||p.turnId||state.activeTurnId;adoptPendingTurnBlock(state.activeTurnId);updateStatus();return}if(m==='turn/completed'){state.activeTurnId=null;updateStatus();setTimeout(()=>state.currentThread&&selectThread(state.currentThread.id,{quiet:true}),180);refreshThreads();return}const blockFor=()=>{let b=$('timeline').querySelector('[data-turn-id="'+CSS.escape(String(p.turnId||''))+'"]');if(!b){b=el('div','turn-block');b.dataset.turnId=p.turnId||'';$('timeline').append(b)}return b};if(m==='item/started'||m==='item/completed'){const item=p.item;if(!item)return;const old=item.id?findItem(item.id):null,node=renderItem(item);rememberLive(node,item);if(old){const wasOpen=old instanceof HTMLDetailsElement&&old.open;old.replaceWith(node);if(wasOpen&&node instanceof HTMLDetailsElement)node.open=true}else blockFor().append(node);scrollBottom();return}const kind=TIMELINE_DELTA_NOTIFICATIONS[m];if(kind){queueDelta(notificationItemId(p),kind,p.delta??p.textDelta??p.outputDelta??p.message??'',p);scrollBottom();return}if(m==='item/reasoning/summaryPartAdded'){queueDelta(notificationItemId(p),'reasoning','\n',p);return}if(m==='thread/tokenUsage/updated'){state.tokenUsage=p.tokenUsage||p.usage||p;updateStatus();return}if(m==='serverRequest/resolved'){const rid=p.requestId??p.id;if(rid!==undefined){state.pendingRequests.delete(String(rid));renderApprovals()}return}if(m==='thread/name/updated'){if(state.currentThread&&p.threadId===state.currentThread.id){state.currentThread.name=p.name;$('threadTitle').textContent=threadTitle(state.currentThread)}refreshThreads();return}if(/^thread\/(archived|unarchived|deleted|closed|started)$/.test(m)||m==='thread/status/changed'){refreshThreads();return}if(['error','warning','configWarning','guardianWarning','deprecationNotice'].includes(m)){toast(p.message||p.error?.message||m,m==='error'?'error':'warning');return}if(p.turnId||p.itemId){const b=blockFor(),d=el('details','system-event item');d.append(el('summary','',m),el('pre','generic-json',JSON.stringify(p,null,2)));b.append(d)}}
@@ -228,7 +230,7 @@ async function resyncAuthoritativeState(){
 function renderOfficialEvents(){const root=$('officialEventRows'),count=$('officialEventCount');if(count)count.textContent=String(state.officialEvents.length);if(!root)return;const entries=state.officialEvents.slice(-200).reverse();if(!entries.length){root.replaceChildren(el('div','capability-loading',tr('officialEventsEmpty')));return}root.replaceChildren(...entries.map(entry=>{const row=el('details','official-event-row'),summary=el('summary'),method=el('span','official-event-method',entry.method),time=el('time','official-event-time',new Date(entry.at).toLocaleTimeString(state.lang==='zh'?'zh-CN':'en',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));summary.append(method);if(entry.truncated)summary.append(el('span','official-event-truncated',tr('officialEventTruncated')));summary.append(time);row.append(summary,el('pre','',entry.json));return row}))}
 function scheduleOfficialEventRender(){const count=$('officialEventCount');if(count)count.textContent=String(state.officialEvents.length);if($('protocolPanel')?.classList.contains('hidden')||state.officialEventRenderTimer)return;state.officialEventRenderTimer=window.setTimeout(()=>{state.officialEventRenderTimer=null;renderOfficialEvents()},120)}
 function recordOfficialNotification(message){state.officialEvents=appendOfficialEvent(state.officialEvents,message);scheduleOfficialEventRender()}
-function connectEvents(){state.eventSource?.close();const es=new EventSource('/api/events',{withCredentials:true});state.eventSource=es;es.onmessage=async ev=>{let e;try{e=JSON.parse(ev.data)}catch{return}if(e.type==='connected'){const reconnecting=state.eventConnectedOnce;state.pendingRequests.clear();for(const r of e.payload?.pendingServerRequests||[])state.pendingRequests.set(String(r.id),r);replayOfficialPlanNotifications(e.payload?.activePlans);renderApprovals();state.eventConnectedOnce=true;hideBanner();if(reconnecting)await resyncAuthoritativeState();return}if(e.type==='serverRequest'){state.pendingRequests.set(String(e.payload.id),e.payload);renderApprovals();return}if(e.type==='serverRequestsCleared'){for(const id of e.payload?.ids||[])state.pendingRequests.delete(String(id));renderApprovals();return}if(e.type==='notification'){recordOfficialNotification(e.payload);appendLive(e.payload)}if(e.type==='protocolMismatch')showBanner(tr('protocolMismatch'));if(e.type==='codexReady'){hideBanner();await resyncAuthoritativeState();return}if(e.type==='eventOversize'){if(e.payload?.originalType==='notification')recordOfficialNotification({method:e.payload?.method||'unknown',params:{transportOversize:true,payloadBytes:e.payload?.bytes||0}});await resyncAuthoritativeState();return}if(e.type==='serverRequestUnsupported'){toast(e.payload?.message||e.payload?.method||tr('degraded'),'warning');return}if(e.type==='codexError'||e.type==='codexRestartFailed')showBanner(e.payload?.message||e.payload?.method||tr('degraded'))};es.onerror=()=>showBanner(tr('reconnect'))}
+function connectEvents(){state.eventSource?.close();const es=new EventSource('/api/events',{withCredentials:true});state.eventSource=es;es.onmessage=async ev=>{let e;try{e=JSON.parse(ev.data)}catch{return}if(e.type==='connected'){const reconnecting=state.eventConnectedOnce;state.pendingRequests.clear();for(const r of e.payload?.pendingServerRequests||[])state.pendingRequests.set(String(r.id),r);replayOfficialPlanNotifications(e.payload?.activePlans);renderApprovals();state.eventConnectedOnce=true;hideBanner();if(reconnecting)await resyncAuthoritativeState();return}if(e.type==='serverRequest'){state.pendingRequests.set(String(e.payload.id),e.payload);renderApprovals();return}if(e.type==='serverRequestsCleared'){for(const id of e.payload?.ids||[])state.pendingRequests.delete(String(id));renderApprovals();return}if(e.type==='notification'){recordOfficialNotification(e.payload);appendLive(e.payload)}if(e.type==='protocolMismatch'&&!e.payload?.accepted)showBanner(tr('protocolMismatch'));if(e.type==='codexReady'){hideBanner();await resyncAuthoritativeState();return}if(e.type==='eventOversize'){if(e.payload?.originalType==='notification')recordOfficialNotification({method:e.payload?.method||'unknown',params:{transportOversize:true,payloadBytes:e.payload?.bytes||0}});await resyncAuthoritativeState();return}if(e.type==='serverRequestUnsupported'){toast(e.payload?.message||e.payload?.method||tr('degraded'),'warning');return}if(e.type==='codexError'||e.type==='codexRestartFailed')showBanner(e.payload?.message||e.payload?.method||tr('degraded'))};es.onerror=()=>showBanner(tr('reconnect'))}
 function showBanner(t){$('connectionBanner').textContent=t;$('connectionBanner').classList.remove('hidden')}function hideBanner(){$('connectionBanner').classList.add('hidden')}
 function requestSummary(r){const p=r.params||{};if(r.method.includes('commandExecution')||r.method==='execCommandApproval')return p.reason||p.command||p.cwd||tr('approvalCommandSummary');if(r.method.includes('fileChange')||r.method==='applyPatchApproval')return p.reason||p.grantRoot||tr('approvalFileSummary');if(r.method==='item/tool/requestUserInput')return p.message||tr('approvalInputSummary');if(r.method==='mcpServer/elicitation/request')return p.message||p.serverName||tr('approvalMcpSummary');if(r.method==='item/permissions/requestApproval')return p.reason||tr('approvalPermissionSummary');if(r.method==='item/tool/call')return (p.namespace?p.namespace+' · ':'')+(p.tool||tr('approvalToolTitle'));return tr('approvalUnknownSummary')}
 function actionButton(label,cls,fn){const b=el('button',cls,label);b.type='button';b.onclick=fn;return b}
@@ -329,7 +331,7 @@ renderOfficialPlan=renderOfficialPlanInteractive;
 upsertOfficialPlan=(turnId,payload)=>{const base=officialPlanSnapshot(turnId,payload);if(!base)return;const snapshot={...base,threadId:String(payload?.threadId||state.currentThread?.id||'')};state.officialPlans.set(snapshot.turnId,snapshot);persistOfficialPlanSnapshot(snapshot);const block=$('timeline')?.querySelector('[data-turn-id="'+CSS.escape(snapshot.turnId)+'"]');if(!block)return;const old=block.querySelector('.official-plan'),node=renderOfficialPlan(snapshot,Boolean(old?.classList.contains('open')));if(old)old.replaceWith(node);else{const anchor=block.querySelector('.work-group');if(anchor)block.insertBefore(node,anchor);else block.append(node)}};
 restoreOfficialPlan=(turnId,block)=>{const snapshot=state.officialPlans.get(String(turnId||''));if(!snapshot||!block)return;const old=block.querySelector('.official-plan'),node=renderOfficialPlan(snapshot,Boolean(old?.classList.contains('open')));if(old)old.replaceWith(node);else{const anchor=block.querySelector('.work-group');if(anchor)block.insertBefore(node,anchor);else block.append(node)}};
 
-function isProtocolNoiseItem(item){const method=String(item?.method||item?.notification||item?.event||'').trim(),type=String(item?.type||'').trim();return method==='turn/diff/updated'||method==='turn/moderationMetadata'||method==='turn/plan/updated'||method==='hook/started'||method==='hook/completed'||type==='turn/diff/updated'||type==='turn/moderationMetadata'||type==='turn/plan/updated'||type==='hook/started'||type==='hook/completed'}
+function isProtocolNoiseItem(item){const method=String(item?.method||item?.notification||item?.event||'').trim(),type=String(item?.type||'').trim();return method==='turn/plan/updated'||type==='turn/plan/updated'}
 const baseRenderTurnBlock=renderTurnBlock;
 renderTurnBlock=turn=>{if(!turn||!Array.isArray(turn.items))return baseRenderTurnBlock(turn);const items=turn.items.filter(item=>!isProtocolNoiseItem(item));return items.length===turn.items.length?baseRenderTurnBlock(turn):baseRenderTurnBlock({...turn,items})};
 const baseRenderThread=renderThread;
@@ -459,9 +461,9 @@ appendLiveLegacy=message=>{observeOfficialTurnEvent(message);return appendLiveLe
    They are transport noise, not conversation content, so remove them at the
    same human-facing boundary as live notifications. */
 const protocolNoisePredicate=isProtocolNoiseItem;
-isProtocolNoiseItem=item=>{if(protocolNoisePredicate(item))return true;const values=[item?.payload?.method,item?.data?.method,item?.event?.method,item?.item?.method,item?.item?.notification,item?.item?.event,item?.item?.type];return values.some(value=>value==='turn/diff/updated'||value==='turn/moderationMetadata'||value==='turn/plan/updated')};
+isProtocolNoiseItem=item=>protocolNoisePredicate(item);
 const removeIgnoredProtocolEventsForHistory=removeIgnoredProtocolEvents;
-removeIgnoredProtocolEvents=(root=$('timeline'))=>{removeIgnoredProtocolEventsForHistory(root);root?.querySelectorAll('.system-event').forEach(node=>{const method=node.querySelector('summary')?.textContent?.trim();if(method==='turn/diff/updated'||method==='turn/moderationMetadata'||method==='turn/plan/updated')node.remove()})};
+removeIgnoredProtocolEvents=(root=$('timeline'))=>removeIgnoredProtocolEventsForHistory(root);
 
 /* Full-history search uses the official occurrence index when the pinned
    App Server advertises it.  The local pass is retained as a supplement so
@@ -686,7 +688,6 @@ afterLogin=async()=>{const result=await afterLoginBeforeRuntimeRecovery();if(sta
 Object.assign(T.zh,{threadReadOnly:'仅查看 · 官方写入冲突',threadBusyReadOnly:'官方当前拒绝网页写入，网页暂时只读；任务结束后即可继续发送'});
 Object.assign(T.en,{threadReadOnly:'Read-only · official write conflict',threadBusyReadOnly:'The official runtime currently rejects this Web write. The view is read-only until the task finishes.'});
 Object.assign(state,{threadReadOnly:Boolean(state.threadReadOnly),threadReadOnlyThreadId:String(state.threadReadOnlyThreadId||''),localTurnThreadId:state.localTurnThreadId||null,localTurnId:state.localTurnId||null});
-const HUMAN_PROTOCOL_NOISE=new Set(['turn/diff/updated','turn/moderationMetadata','hook/started','hook/completed']);
 const LOCAL_TURN_STORAGE_KEY='cweb_local_turn_v1';
 function protocolThreadId(params){return params?.threadId||params?.thread?.id||params?.turn?.threadId||state.currentThread?.id||''}
 function protocolTurnId(params){return params?.turnId||params?.turn?.id||state.activeTurnId||''}
@@ -706,13 +707,13 @@ const isActiveWriterConflict=error=>{const text=[error?.code,error?.body?.error,
 const ensureThreadLoadedBeforeReadOnlyBoundary=ensureThreadLoaded;
 ensureThreadLoaded=async(id,{allowReadOnly=false}={})=>{try{const result=await ensureThreadLoadedBeforeReadOnlyBoundary(id);state.threadReadOnly=false;state.threadReadOnlyThreadId='';return result}catch(error){if(!isActiveWriterConflict(error))throw error;state.threadReadOnly=true;state.threadReadOnlyThreadId=String(id||'');renderWriteControls();updateStatus();if(allowReadOnly){return{readOnly:true}};const friendly=new Error(tr('threadBusyReadOnly'));friendly.code='THREAD_READ_ONLY';friendly.status=409;throw friendly}};
 const isProtocolNoiseItemBeforeHumanBoundary=isProtocolNoiseItem;
-isProtocolNoiseItem=item=>{if(isProtocolNoiseItemBeforeHumanBoundary(item))return true;const values=[item?.method,item?.notification,item?.event,item?.type,item?.payload?.method,item?.data?.method,item?.event?.method,item?.item?.method,item?.item?.notification,item?.item?.event,item?.item?.type];return values.some(value=>HUMAN_PROTOCOL_NOISE.has(String(value||'')))};
+isProtocolNoiseItem=item=>isProtocolNoiseItemBeforeHumanBoundary(item);
 const removeIgnoredProtocolEventsBeforeHumanBoundary=removeIgnoredProtocolEvents;
-removeIgnoredProtocolEvents=(root=$('timeline'))=>{removeIgnoredProtocolEventsBeforeHumanBoundary(root);root?.querySelectorAll('.system-event').forEach(node=>{const method=node.querySelector('summary')?.textContent?.trim();if(HUMAN_PROTOCOL_NOISE.has(String(method||'')))node.remove()});pruneEmptyWorkGroups(root)};
+removeIgnoredProtocolEvents=(root=$('timeline'))=>{removeIgnoredProtocolEventsBeforeHumanBoundary(root);pruneEmptyWorkGroups(root)};
 const appendLiveBeforeHumanBoundary=appendLive;
-appendLive=message=>{const method=String(message?.method||'');if(HUMAN_PROTOCOL_NOISE.has(method)){removeIgnoredProtocolEvents();return}trackLocalTurnLifecycle(message);return appendLiveBeforeHumanBoundary(message)};
+appendLive=message=>{trackLocalTurnLifecycle(message);return appendLiveBeforeHumanBoundary(message)};
 const appendLiveLegacyBeforeHumanBoundary=appendLiveLegacy;
-appendLiveLegacy=message=>{const method=String(message?.method||'');if(HUMAN_PROTOCOL_NOISE.has(method)){removeIgnoredProtocolEvents();return}trackLocalTurnLifecycle(message);return appendLiveLegacyBeforeHumanBoundary(message)};
+appendLiveLegacy=message=>{trackLocalTurnLifecycle(message);return appendLiveLegacyBeforeHumanBoundary(message)};
 const renderThreadBeforeLocalTurnBoundary=renderThread;
 renderThread=thread=>{const threadId=String(thread?.id||''),officialTurnId=inferActiveTurnId(thread),officialActive=Boolean(officialTurnId||isActiveOfficialStatus(thread?.status)),localTurnId=localTurnForThread(thread);state.officialActiveTurnId=officialTurnId?String(officialTurnId):null;state.officialThreadActive=officialActive;state.threadReadOnly=Boolean(state.threadReadOnly&&state.threadReadOnlyThreadId===threadId);if(!officialActive&&sameThread(state.threadReadOnlyThreadId,threadId)){state.threadReadOnly=false;state.threadReadOnlyThreadId=''}state.activeTurnId=localTurnId;const result=renderThreadBeforeLocalTurnBoundary(thread);state.activeTurnId=localTurnId;updateStatus();return result};
 const renderContextUsageBeforeLocalTurnBoundary=renderContextUsage;
@@ -1238,3 +1239,189 @@ appendLiveLegacy=message=>{
   if(method==='thread/status/changed'&&status&&!isActiveOfficialStatus(status)){scheduleTurnReconciliation(0);queueTerminalThreadRefresh(threadId,{allowActive:true});}
   return result;
 };
+
+/* Keep per-turn protocol notifications visible without maintaining a growing
+ * deny-list. Conversation messages and structured official plans keep their
+ * dedicated surfaces; every other turn-scoped notification falls into the
+ * same compact work-process lane, including future notification names. */
+const protocolWorkControlItemMethod=method=>String(method||'')==='turn/plan/updated';
+const protocolWorkItemMethod=item=>{
+  const direct=item?.method||item?.notification||item?.event;
+  if(direct)return String(direct);
+  const type=String(item?.type||'');
+  return type.includes('/')?type:'';
+};
+const protocolWorkMethodTitle=method=>{
+  const raw=String(method||'').trim(),known={
+    'turn/diff/updated':state.lang==='zh'?'执行差异更新':'Execution diff update',
+    'turn/moderationMetadata':state.lang==='zh'?'审核元数据':'Moderation metadata',
+    'hook/started':state.lang==='zh'?'Hook 开始':'Hook started',
+    'hook/completed':state.lang==='zh'?'Hook 完成':'Hook completed',
+    'item/commandExecution/terminalInteraction':state.lang==='zh'?'终端交互':'Terminal interaction',
+  };
+  if(known[raw])return known[raw];
+  const token=raw.split('/').filter(Boolean).at(-1)||tr('protocolWorkUnknown');
+  return token.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/[_-]/g,' ').replace(/\b\w/g,x=>x.toUpperCase());
+};
+const protocolWorkPayload=message=>message?.params&&typeof message.params==='object'?message.params:message;
+const protocolWorkPreview=payload=>{
+  const p=payload&&typeof payload==='object'?payload:{};
+  const candidate=p.reason||p.message||p.command||p.path||p.query||p.text||p.delta||p.outputDelta||p.item?.command||p.item?.path||p.item?.type;
+  if(candidate===undefined||candidate===null)return tr('protocolWorkSummary');
+  return shortText(typeof candidate==='string'?candidate:JSON.stringify(candidate),140);
+};
+const protocolWorkJson=value=>{try{const text=JSON.stringify(value,null,2);return text.length>12_000?`${text.slice(0,11_800)}\n… ${text.length-11_800} chars omitted`:text}catch{return String(value||'')}};
+function renderProtocolWorkItem(message){
+  const method=protocolWorkItemMethod(message)||tr('protocolWorkUnknown'),payload=protocolWorkPayload(message),node=el('details','system-event item protocol-work-event');
+  node.dataset.protocolMethod=method;
+  const summary=el('summary'),icon=el('span','protocol-event-icon','•'),copy=el('span','protocol-event-copy'),title=el('span','protocol-event-title',protocolWorkMethodTitle(method)),preview=el('span','protocol-event-preview',protocolWorkPreview(payload));
+  copy.append(title,preview);summary.append(icon,copy);node.append(summary);
+  const body=el('div','protocol-event-body');body.append(el('div','protocol-event-meta',method),el('pre','generic-json',protocolWorkJson(payload)));node.append(body);
+  return node;
+}
+const protocolWorkTurnId=message=>{
+  const p=message?.params||message||{};
+  const latestTurn=Array.isArray(state.currentThread?.turns)?state.currentThread.turns.at(-1)?.id:'';
+  return String(p.turnId||p.turn?.id||p.item?.turnId||p.item?.turn?.id||state.activeTurnId||state.officialActiveTurnId||latestTurn||'');
+};
+function protocolWorkBlock(message){
+  const p=message?.params||message||{},turnId=protocolWorkTurnId(message),itemId=String(p.itemId||p.item?.id||'');
+  if(!turnId){const live=itemId?state.liveItems.get(itemId):null;const existing=live?.closest?.('.turn-block');if(existing)return existing;return null}
+  let block=$('timeline')?.querySelector('[data-turn-id="'+CSS.escape(turnId)+'"]');
+  if(!block){block=renderTurnBlock({id:turnId});$('timeline')?.append(block)}
+  return block;
+}
+function appendProtocolWorkEvent(message){
+  const p=message?.params||{},block=protocolWorkBlock(message);if(!block)return false;
+  let group=block.querySelector(':scope > .work-group');
+  if(!group){const activeId=state.activeTurnId||state.officialActiveTurnId;group=createWorkGroup({id:block.dataset.turnId},Boolean(activeId&&activeId===block.dataset.turnId));block.append(group)}
+  const method=String(message?.method||protocolWorkItemMethod(message)||tr('protocolWorkUnknown')),itemId=String(p.itemId||p.item?.id||'');
+  const coalesce=/^(turn\/(diff\/updated|moderationMetadata)|hook\/(started|completed))$/.test(method)||/\/delta$/.test(method)||method.includes('terminalInteraction')||!itemId;
+  const protocolKey=`${method}:${coalesce?itemId:''}`;
+  let node=coalesce?[...group.querySelectorAll('.protocol-work-event')].find(item=>item.dataset.protocolKey===protocolKey):null;
+  if(node){
+    const count=Number(node.dataset.protocolCount||1)+1;node.dataset.protocolCount=String(count);
+    const countNode=node.querySelector('.protocol-event-count');if(countNode)countNode.textContent=`${count} ${tr('protocolWorkEventCount')}`;
+    const body=node.querySelector('.protocol-event-body');if(body)body.replaceChildren(el('div','protocol-event-meta',method),el('pre','generic-json',protocolWorkJson(p)));
+  }else{
+    node=renderProtocolWorkItem(message);node.dataset.protocolCount='1';node.dataset.protocolKey=protocolKey;
+    if(coalesce){const title=node.querySelector('.protocol-event-copy');if(title)title.append(el('span','protocol-event-count',`1 ${tr('protocolWorkEventCount')}`))}
+    group.querySelector('.work-group-items').append(node);
+  }
+  updateWorkGroup(group);return true;
+}
+const protocolWorkHandledMethods=new Set([
+  'turn/started','turn/completed','thread/compacted','thread/queue/changed','thread/tokenUsage/updated','serverRequest/resolved','thread/name/updated','thread/status/changed',
+  'item/started','item/completed','item/reasoning/summaryPartAdded','turn/plan/updated','error','warning','configWarning','guardianWarning','deprecationNotice',
+  ...Object.keys(TIMELINE_DELTA_NOTIFICATIONS),
+]);
+const shouldRouteProtocolWorkEvent=message=>{
+  const method=String(message?.method||''),p=message?.params||{};
+  if(!method||protocolWorkControlItemMethod(method)||protocolWorkHandledMethods.has(method))return false;
+  const hasOwner=Boolean(p.threadId||p.thread?.id||p.turnId||p.turn?.id||p.itemId||p.item?.id);
+  if(hasOwner&&!belongsHere(p))return false;
+  if(!hasOwner&&!state.currentThread?.id&&!state.activeTurnId&&!state.officialActiveTurnId)return false;
+  return true;
+};
+const appendLiveBeforeGenericProtocolWork=appendLive;
+appendLive=message=>{if(shouldRouteProtocolWorkEvent(message)){appendProtocolWorkEvent(message);return}return appendLiveBeforeGenericProtocolWork(message)};
+const appendLiveLegacyBeforeGenericProtocolWork=appendLiveLegacy;
+appendLiveLegacy=message=>{if(shouldRouteProtocolWorkEvent(message)){appendProtocolWorkEvent(message);return}return appendLiveLegacyBeforeGenericProtocolWork(message)};
+const renderItemBeforeGenericProtocolWork=renderItem;
+renderItem=item=>{const method=protocolWorkItemMethod(item);if(method&&!protocolWorkControlItemMethod(method))return renderProtocolWorkItem(item);return renderItemBeforeGenericProtocolWork(item)};
+const protocolControlFilterBeforeGenericProtocolWork=isProtocolNoiseItem;
+isProtocolNoiseItem=item=>{
+  const method=protocolWorkItemMethod(item);return protocolWorkControlItemMethod(method)||protocolControlFilterBeforeGenericProtocolWork(item)&&method==='turn/plan/updated';
+};
+removeIgnoredProtocolEvents=root=>{pruneEmptyWorkGroups(root)};
+
+/* Composer palette: slash actions call existing official methods; @ mentions
+ * use official fuzzy file search and expose the official goal/plan/capability
+ * surfaces without inventing a parallel protocol. */
+state.composerPalette=state.composerPalette||{mode:'',query:'',items:[],activeIndex:0,searchToken:0,searchTimer:null};
+const composerPaletteState=()=>state.composerPalette;
+const composerPaletteContext=()=>{
+  const input=$('prompt'),value=input?.value||'',cursor=input?.selectionStart??value.length,before=value.slice(0,cursor),match=before.match(/(?:^|\s)([\/@])([^\s]*)$/);
+  if(!match)return null;
+  return{trigger:match[1],query:match[2]||'',start:cursor-(match[0].length-(match[0].startsWith(' ')?1:0)),end:cursor,cursor};
+};
+const closeComposerPalette=()=>{const palette=$('composerPalette');if(!palette)return;palette.classList.add('hidden');palette.setAttribute('aria-hidden','true');composerPaletteState().items=[];composerPaletteState().activeIndex=0};
+const composerMenuItem=(id,label,description,icon,action,options={})=>({id,label,description,icon,action,...options});
+const currentWorkspace=()=>String(state.currentThread?.cwd||state.meta?.workspace||'').trim();
+const officialCapabilityAction=async kind=>{openDrawer();await loadCapabilitySummary(true);const group=$('capabilityCards')?.querySelector(`[data-capability-group="${CSS.escape(kind)}"]`);if(group)group.open=true};
+const slashItems=()=>[
+  composerMenuItem('apis',tr('composerApis'),tr('composerApisHint'),'⋯',()=>openDrawer()),
+  composerMenuItem('mcp',tr('composerMcp'),tr('composerMcpHint'),'⌁',()=>officialCapabilityAction('mcp')),
+  composerMenuItem('skills',tr('composerSkills'),tr('composerSkillsHint'),'✦',()=>officialCapabilityAction('skills')),
+  ...(state.meta?.capabilities?.experimentalApi?[composerMenuItem('plugins',tr('composerPlugins'),tr('composerPluginsHint'),'◈',()=>officialCapabilityAction('plugins'))]:[]),
+  composerMenuItem('apps',tr('composerApps'),tr('composerAppsHint'),'▦',()=>officialCapabilityAction('apps')),
+  composerMenuItem('new',tr('composerNew'),tr('composerNewHint'),'+',()=>openNewThreadModal()),
+  composerMenuItem('compact',tr('composerCompact'),tr('composerCompactHint'),'≋',()=>compactCurrentThread(),{available:Boolean(state.currentThread?.id&&hasRequest('thread/compact/start'))}),
+  composerMenuItem('reload',tr('composerReload'),tr('composerReloadHint'),'↻',()=>state.currentThread&&selectThread(state.currentThread.id),{available:Boolean(state.currentThread?.id)}),
+  composerMenuItem('archive',tr('composerArchive'),tr('composerArchiveHint'),'▱',()=>state.currentThread&&archiveThread(state.currentThread),{available:Boolean(state.currentThread?.id&&hasRequest('thread/archive'))}),
+].filter(item=>item.available!==false);
+const mentionStaticItems=()=>[
+  composerMenuItem('files',tr('composerFiles'),tr('composerFilesHint'),'⌕',()=>composerPaletteState().mode='files',{available:hasRequest('fuzzyFileSearch')}),
+  composerMenuItem('goal',tr('composerGoal'),tr('composerGoalHint'),'◎',()=>editThreadGoal(),{available:Boolean(state.currentThread?.id&&hasRequest('thread/goal/get')&&hasRequest('thread/goal/set'))}),
+  composerMenuItem('plan',tr('composerPlanMode'),tr('composerPlanModeHint'),'☼',()=>setOfficialPlanMode(),{available:Boolean(state.currentThread?.id&&hasRequest('thread/settings/update'))}),
+].filter(item=>item.available!==false);
+const mentionCapabilityItems=()=>{
+  const groups=state.capabilities?.groups||[],items=[];
+  for(const group of groups){for(const row of group.rows||[]){const name=String(row?.name||'').trim();if(!name)continue;items.push(composerMenuItem(`cap-${group.id}-${name}`,name,row.description||tr('composerPluginMention'),group.id==='mcp'?'⌁':group.id==='apps'?'▦':group.id==='skills'?'✦':'◈',()=>insertComposerMention(name)))} }
+  return items;
+};
+const mentionItems=()=>[...mentionStaticItems(),...mentionCapabilityItems()];
+const paletteFiltered=(items,query)=>{const q=String(query||'').trim().toLowerCase();return q?items.filter(item=>`${item.label} ${item.description} ${item.id}`.toLowerCase().includes(q)):items};
+const setComposerTextSelection=(start,end,replacement)=>{const input=$('prompt');if(!input)return;const value=input.value;input.value=value.slice(0,start)+replacement+value.slice(end);const next=start+replacement.length;input.setSelectionRange(next,next);resizePrompt();input.dispatchEvent(new Event('input',{bubbles:true}))};
+const insertComposerMention=(value)=>{const ctx=composerPaletteContext();if(!ctx)return;setComposerTextSelection(ctx.start,ctx.end,`@${value} `);closeComposerPalette();$('prompt')?.focus()};
+const renderComposerPalette=()=>{
+  const palette=$('composerPalette'),root=$('composerPaletteItems'),title=$('composerPaletteTitle'),hint=$('composerPaletteHint'),s=composerPaletteState();if(!palette||!root)return;
+  palette.classList.remove('hidden');palette.setAttribute('aria-hidden','false');title.textContent=s.mode==='/'?tr('slashMenu'):tr('mentionMenu');hint.textContent=tr('composerMenuHint');root.replaceChildren();
+  if(!s.items.length){root.append(el('div','composer-palette-empty',s.mode==='files'||(s.mode==='@'&&s.query)?tr('composerFileSearchEmpty'):tr('composerNoResults')));return}
+  s.items.forEach((item,index)=>{const button=el('button','composer-palette-item'+(index===s.activeIndex?' active':''));button.type='button';button.setAttribute('role','option');button.setAttribute('aria-selected',String(index===s.activeIndex));const icon=el('span','composer-palette-icon',item.icon||'•'),copy=el('span','composer-palette-copy'),label=el('span','composer-palette-label',item.label),description=el('span','composer-palette-description',item.description||'');copy.append(label,description);button.append(icon,copy);button.onmouseenter=()=>{if(s.activeIndex===index)return;s.activeIndex=index;root.querySelectorAll('.composer-palette-item').forEach((node,nodeIndex)=>{node.classList.toggle('active',nodeIndex===index);node.setAttribute('aria-selected',String(nodeIndex===index))})};button.onclick=()=>{void chooseComposerPaletteItem(item)};root.append(button)});
+  root.querySelector('.composer-palette-item.active')?.scrollIntoView({block:'nearest'});
+};
+async function searchComposerFiles(query){
+  const s=composerPaletteState(),token=++s.searchToken,roots=currentWorkspace()?[currentWorkspace()]:[];
+  if(!hasRequest('fuzzyFileSearch')||!roots.length){s.items=[];renderComposerPalette();return}
+  if(!String(query||'').trim()){s.items=[];renderComposerPalette();return}
+  try{
+    const result=await rpc('fuzzyFileSearch',{query:String(query),roots},{timeoutMs:8_000});if(token!==s.searchToken)return;
+    const files=Array.isArray(result?.files)?result.files.slice(0,24):[],fileItems=files.map((file,index)=>composerMenuItem(`file-${index}`,file.path||file.file_name||'',file.match_type==='directory'?tr('composerFiles'):tr('composerSelectedFile'),file.match_type==='directory'?'□':'▧',()=>insertComposerMention(file.path||file.file_name||'')));s.items=[...paletteFiltered(mentionItems(),query),...fileItems];s.activeIndex=0;renderComposerPalette();
+  }catch(error){if(token!==s.searchToken)return;s.items=[];renderComposerPalette();console.warn('Official file search failed',error)}
+}
+async function editThreadGoal(){
+  closeComposerPalette();if(!requireWebWrite(state.currentThread?.id))return;const threadId=state.currentThread?.id;if(!threadId||!hasRequest('thread/goal/get')||!hasRequest('thread/goal/set')){toast(tr('composerMentionUnavailable'),'warning');return}
+  try{const current=await rpc('thread/goal/get',{threadId:String(threadId)}),old=String(current?.objective||current?.goal?.objective||current?.goal||'');const objective=window.prompt(tr('composerGoalPrompt'),old);if(objective===null)return;await rpc('thread/goal/set',{threadId:String(threadId),objective:objective.trim()||null,status:objective.trim()?'active':null});toast(tr('composerGoalSaved'))}catch(error){toast(`${tr('sendFailed')}: ${error.message}`,'error')}
+}
+async function setOfficialPlanMode(){
+  closeComposerPalette();if(!requireWebWrite(state.currentThread?.id))return;const threadId=state.currentThread?.id;if(!threadId||!hasRequest('thread/settings/update')){toast(tr('composerMentionUnavailable'),'warning');return}
+  const model=$('modelSelect')?.value||state.models?.[0]?.id||state.meta?.model||'gpt-5';const effort=$('effortSelect')?.value||null;try{await rpc('thread/settings/update',{threadId:String(threadId),collaborationMode:{mode:'plan',settings:{model,reasoning_effort:effort||null}}});toast(tr('composerPlanEnabled'))}catch(error){toast(`${tr('sendFailed')}: ${error.message}`,'error')}
+}
+async function chooseComposerPaletteItem(item){
+  const s=composerPaletteState(),ctx=composerPaletteContext(),keepsDraft=item.id==='files'||item.id.startsWith('file-')||item.id.startsWith('cap-');
+  if(s.mode==='files'&&item.id.startsWith('file-')){await item.action();return}
+  if(!keepsDraft&&ctx)setComposerTextSelection(ctx.start,ctx.end,'');
+  closeComposerPalette();try{await item.action()}catch(error){toast(`${tr('sendFailed')}: ${error.message}`,'error')}
+}
+function updateComposerPalette(){
+  const ctx=composerPaletteContext(),s=composerPaletteState();if(!ctx){closeComposerPalette();return}
+  s.mode=ctx.trigger;s.query=ctx.query;s.activeIndex=0;
+  if(ctx.trigger==='/' ){s.items=paletteFiltered(slashItems(),ctx.query);renderComposerPalette();return}
+  if(s.mode==='files'||ctx.query){s.mode='@';if(s.searchTimer)clearTimeout(s.searchTimer);s.items=ctx.query?paletteFiltered(mentionItems(),ctx.query):mentionItems();renderComposerPalette();if(ctx.query){s.searchTimer=setTimeout(()=>void searchComposerFiles(ctx.query),180)}return}
+  s.items=paletteFiltered(mentionItems(),ctx.query);renderComposerPalette();
+  if(!ctx.query&&!state.capabilities){void loadCapabilitySummary().then(()=>{const current=composerPaletteContext();if(current?.trigger==='@'&&!current.query){s.items=mentionItems();renderComposerPalette()}})}
+}
+function handleComposerPaletteKeydown(event){
+  const palette=$('composerPalette');if(!palette||palette.classList.contains('hidden'))return false;const s=composerPaletteState();if(event.key==='Escape'){closeComposerPalette();return true}if(event.key==='ArrowDown'){s.activeIndex=Math.min(Math.max(0,s.items.length-1),s.activeIndex+1);renderComposerPalette();return true}if(event.key==='ArrowUp'){s.activeIndex=Math.max(0,s.activeIndex-1);renderComposerPalette();return true}if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing&&s.items[s.activeIndex]){event.preventDefault();void chooseComposerPaletteItem(s.items[s.activeIndex]);return true}return false;
+}
+
+/* Capability rows double as stable anchors for slash actions. */
+const renderCapabilitiesBeforePaletteAnchor=renderCapabilities;
+renderCapabilities=model=>{const result=renderCapabilitiesBeforePaletteAnchor(model);document.querySelectorAll('.capability-group').forEach((node,index)=>{const group=model?.groups?.[index];if(group)node.dataset.capabilityGroup=group.id});return result};
+$('prompt')?.addEventListener('input',updateComposerPalette);
+// Capture palette navigation before the legacy composer Enter handler can
+// submit the message behind the menu.
+document.addEventListener('keydown',event=>{if(event.target===$('prompt')&&handleComposerPaletteKeydown(event))event.stopImmediatePropagation()},true);
+$('prompt')?.addEventListener('keydown',event=>{if(handleComposerPaletteKeydown(event))return;if(event.key==='Escape')closeComposerPalette()});
+document.addEventListener('pointerdown',event=>{if(!$('composerCard')?.contains(event.target))closeComposerPalette()});

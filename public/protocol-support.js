@@ -36,9 +36,6 @@ export const TIMELINE_DELTA_NOTIFICATIONS = Object.freeze({
   'item/reasoning/summaryTextDelta': 'reasoning',
   'item/reasoning/textDelta': 'reasoning',
   'item/mcpToolCall/progress': 'tool-progress',
-  'turn/diff/updated': 'ignore',
-  'turn/moderationMetadata': 'ignore',
-  'turn/plan/updated': 'ignore',
 });
 
 // Every schema-admitted ServerNotification is recorded in the bounded

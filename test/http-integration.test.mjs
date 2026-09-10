@@ -36,6 +36,34 @@ process.exit(2);
 `,{mode:0o755}); return file;
 }
 
+function fakeForwardCompatibleNotificationCodex(dir){
+  const file=path.join(dir,'codex');
+  fs.writeFileSync(file,`#!/usr/bin/env node
+const fs=require('node:fs'),path=require('node:path'),readline=require('node:readline');
+const args=process.argv.slice(2);
+if(args[0]==='--version'){console.log('codex-cli 9.9.9-forward-compatible-test');process.exit(0)}
+if(args[0]==='app-server'&&args[1]==='generate-json-schema'){
+ const out=args[args.indexOf('--out')+1];fs.mkdirSync(out,{recursive:true});
+ const req={definitions:{InitializeParams:{type:'object'},ThreadListParams:{type:'object'}},oneOf:[
+  {title:'InitializeRequest',properties:{id:{},method:{enum:['initialize']},params:{$ref:'#/definitions/InitializeParams'}},required:['id','method','params']},
+  {title:'Thread/listRequest',properties:{id:{},method:{enum:['thread/list']},params:{$ref:'#/definitions/ThreadListParams'}},required:['id','method','params']},
+ ]};
+ const empty={definitions:{},oneOf:[]};
+ const snote={definitions:{},oneOf:[{title:'Thread/startedNotification',properties:{method:{enum:['thread/started']},params:{type:'object'}},required:['method','params']}]};
+ for(const [name,data] of [['ClientRequest.json',req],['ClientNotification.json',empty],['ServerRequest.json',empty],['ServerNotification.json',snote]])fs.writeFileSync(path.join(out,name),JSON.stringify(data));process.exit(0);
+}
+if(args[0]==='app-server'&&args[1]==='generate-ts'){
+ const out=args[args.indexOf('--out')+1];fs.mkdirSync(out,{recursive:true});
+ for(const [name,data] of Object.entries({'ClientRequest.ts':'export type ClientRequest={"method":"initialize"}|{"method":"thread/list"};','ClientNotification.ts':'export type Empty=never;','ServerRequest.ts':'export type Empty=never;','ServerNotification.ts':'export type ServerNotification={"method":"thread/started"};'}))fs.writeFileSync(path.join(out,name),data);process.exit(0);
+}
+if(args[0]==='app-server'){
+ const rl=readline.createInterface({input:process.stdin});
+ rl.on('line',line=>{const m=JSON.parse(line);if(m.method==='initialize')return console.log(JSON.stringify({id:m.id,result:{codexHome:'/fake',platformFamily:'unix',platformOs:'linux'}}));if(m.method==='initialized')return;if(m.method==='thread/list'){console.log(JSON.stringify({id:m.id,result:{data:[{id:'thread-forward',preview:'forward compatible'}]}}));return setTimeout(()=>console.log(JSON.stringify({method:'turn/futureProtocolEvent',params:{threadId:'thread-forward',turnId:'turn-forward',detail:'future protocol'}})),80)}if(m.id!==undefined)console.log(JSON.stringify({id:m.id,result:{}}));});return;
+}
+process.exit(2);
+`,{mode:0o755});return file;
+}
+
 function fakeTurnStartDedupeCodex(dir){
   const file=path.join(dir,'codex');
   fs.writeFileSync(file,`#!/usr/bin/env node
@@ -201,6 +229,18 @@ test('full HTTP gateway admits only methods exported by official schema', async(
   });
   await events.body?.cancel();
   assert.equal(exited.code,0,logs);
+});
+
+test('forward-compatible server notifications remain available to the Web event stream', async(t)=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cweb-forward-notification-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const codex=fakeForwardCompatibleNotificationCodex(dir),port=await getFreePort(),url=`http://127.0.0.1:${port}`,token='forward-notification-test-token';let logs='';
+  const child=spawn(process.execPath,['src/server.mjs'],{cwd:root,env:{...process.env,CWEB_CODEX_BIN:codex,CWEB_STATE_DIR:path.join(dir,'state'),CWEB_WORKSPACE:dir,CWEB_HOST:'127.0.0.1',CWEB_PORT:String(port),CWEB_REQUIRE_AUTH:'1',CWEB_TOKEN:token,CWEB_MCP_APPS:'0'},stdio:['ignore','pipe','pipe']});
+  child.stdout.on('data',x=>logs+=x);child.stderr.on('data',x=>logs+=x);t.after(()=>{if(child.exitCode===null)child.kill('SIGTERM')});await waitReady(url,child);
+  const origin=url,login=await fetch(url+'/api/login',{method:'POST',headers:{'content-type':'application/json',origin},body:JSON.stringify({token})});assert.equal(login.status,200,logs);const cookie=login.headers.get('set-cookie').split(';',1)[0];
+  const response=await fetch(url+'/api/events',{headers:{cookie}}),reader=sseReader(response);t.after(()=>reader.cancel());assert.equal((await sseNextWithTimeout(reader)).type,'connected');
+  const list=await fetch(url+'/api/rpc',{method:'POST',headers:{'content-type':'application/json',origin,cookie},body:JSON.stringify({method:'thread/list',params:{}})});assert.equal(list.status,200,logs);
+  const first=await sseNextWithTimeout(reader),second=await sseNextWithTimeout(reader);const events=[first,second];assert.ok(events.some(event=>event.type==='protocolMismatch'&&event.payload.accepted===true));const notification=events.find(event=>event.type==='notification');assert.equal(notification?.payload?.method,'turn/futureProtocolEvent');assert.equal(notification?.payload?.params?.detail,'future protocol');
+  await reader.cancel();child.kill('SIGTERM');await new Promise(resolve=>child.once('exit',resolve));
 });
 
 test('repeating one Web turn/start id reuses the in-flight official result', async(t)=>{

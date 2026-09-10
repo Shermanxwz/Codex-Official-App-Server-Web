@@ -136,6 +136,13 @@
         <aside id="officialPlanDock" class="official-plan-dock hidden" aria-live="polite"></aside>
         <div id="composerCard" class="composer-card">
           <textarea id="prompt" rows="1" data-i18n-placeholder="prompt" placeholder="给 Codex 发送消息…" spellcheck="true"></textarea>
+          <div id="composerPalette" class="composer-palette hidden" role="listbox" aria-label="输入菜单" aria-hidden="true">
+            <div class="composer-palette-head">
+              <span id="composerPaletteTitle"></span>
+              <small id="composerPaletteHint"></small>
+            </div>
+            <div id="composerPaletteItems" class="composer-palette-items"></div>
+          </div>
           <div id="attachmentTray" class="attachment-tray hidden" aria-live="polite"></div>
           <input id="attachmentInput" class="hidden" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" multiple>
           <div id="deliveryStatus" class="delivery-status hidden" role="status" aria-live="polite" aria-hidden="true"></div>

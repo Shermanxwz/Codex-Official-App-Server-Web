@@ -64,6 +64,8 @@ Host page
 
 ## Normal Web UX
 
+Conversation messages stay on the primary timeline; every other turn-scoped protocol event is placed in the default-collapsed work process, with high-frequency events coalesced and raw parameters available on demand. New event names fall through to the generic work-item renderer, while official plans retain their structured plan card. The composer supports `/` for official capabilities and thread actions, and `@` for official fuzzy file search plus discovered capability, plugin, and App mentions.
+
 New Web-created threads request the official `historyMode:'paginated'` contract whenever the pinned runtime advertises the paging methods. Existing `legacy` threads remain official threads and are read through stable `thread/read(includeTurns:true)`; experimental paging controls are hidden for them.
 
 Explicit quick-view thread selection bypasses stale browser cache and rereads the official recent ten-turn summary page, with a visible quick-view boundary. A fresh SSE connection receives the gateway's bounded active official-plan snapshot; terminal or empty-plan signals clear it.

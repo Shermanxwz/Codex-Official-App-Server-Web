@@ -23,6 +23,7 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   const liveActivity = fs.readFileSync(path.join(root, 'public/live-activity.js'), 'utf8');
   const css = fs.readFileSync(path.join(root, 'public/styles.css'), 'utf8');
   const protocol = fs.readFileSync(path.join(root, 'public/protocol-support.js'), 'utf8');
+  const server = fs.readFileSync(path.join(root, 'src/server.mjs'), 'utf8');
   assert.ok(fs.statSync(path.join(root, 'public/favicon.png')).size > 0);
   assert.match(html, /<link rel="icon" href="\/favicon\.png" type="image\/png"/);
   assert.match(html, /<link rel="apple-touch-icon" href="\/favicon\.png">/);
@@ -258,8 +259,12 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /threadOperationBusy/);
   assert.match(app, /readThreadForUi\(id,\{force:force\|\|explicitSelection,signal:controller\.signal\}\)/);
   assert.doesNotMatch(app, /if\(!force\)await ensureThreadLoaded/);
-  assert.match(protocol, /turn\/diff\/updated/);
-  assert.match(app, /kind==='ignore'/);
+  assert.doesNotMatch(protocol, /'turn\/diff\/updated'\s*:\s*'ignore'/);
+  assert.match(app, /function appendProtocolWorkEvent/);
+  assert.match(app, /protocolMismatch'&&!e\.payload\?\.accepted/);
+  assert.match(app, /terminalInteraction/);
+  assert.match(app, /composerPalette/);
+  assert.match(server, /accepted:\s*true/);
   assert.match(css, /grid-template-columns:minmax\(0,1fr\) auto/);
   assert.match(css, /@media\(max-width:480px\)\{\s*\.composer-toolbar\{grid-template-columns:minmax\(0,1fr\)/);
   assert.match(css, /container-type:inline-size/);
