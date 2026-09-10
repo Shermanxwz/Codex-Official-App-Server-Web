@@ -149,6 +149,10 @@
           <div class="composer-toolbar">
             <div class="composer-left">
               <button id="attachButton" class="pill-button attach-button" type="button" data-i18n-title="pasteImageHint" data-i18n="attachImage" title="点击添加或按 Ctrl+V 粘贴图片">＋ 图片</button>
+              <button id="planModeToggle" class="pill-button plan-mode-toggle hidden" type="button" aria-pressed="false" aria-hidden="true" title="退出计划模式">
+                <span class="plan-mode-close" aria-hidden="true">×</span>
+                <span id="planModeLabel" data-i18n="planModeLabel">计划</span>
+              </button>
               <select id="modelSelect" class="pill-select" data-i18n-title="model" title="模型" aria-label="模型"></select>
               <select id="effortSelect" class="pill-select" data-i18n-title="reasoning" title="推理强度" aria-label="推理强度"></select>
             </div>

@@ -388,6 +388,11 @@ body.drawer-resizing{cursor:ew-resize!important;user-select:none}
 .composer-toggle:hover{border-color:var(--line);color:var(--text)}
 .composer-toggle.active{border-color:color-mix(in srgb,var(--ok) 28%,var(--line));color:var(--ok)}
 .composer-toggle.inactive{color:var(--faint)}
+.plan-mode-toggle{border-color:color-mix(in srgb,var(--accent) 20%,var(--line));color:var(--text);background:color-mix(in srgb,var(--accent) 8%,var(--soft));font-weight:650}
+.plan-mode-toggle:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.plan-mode-toggle:disabled{cursor:wait;opacity:.68}
+.plan-mode-close{display:grid;place-items:center;width:15px;height:15px;border-radius:50%;background:color-mix(in srgb,var(--muted) 28%,transparent);color:var(--muted);font-size:11px;line-height:1}
+.plan-mode-toggle:hover:not(:disabled) .plan-mode-close{background:var(--accent);color:var(--accentText)}
 .auto-scroll-icon{font-size:12px;line-height:1}
 .auto-scroll-state{font-weight:700}
 @media(max-width:760px){

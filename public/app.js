@@ -19,6 +19,8 @@ Object.assign(T.zh,{contextUsageLabel:'上下文',contextUsageUsed:'已用',cont
 Object.assign(T.en,{contextUsageLabel:'Context',contextUsageUsed:'Used',contextUsageRemaining:'Remaining',contextUsageWindow:'Limit',contextUsageUnknown:'The official runtime has not returned this model’s context limit',contextUsageSource:'Official token usage · current model',contextUsageOverLimit:'Context limit reached',contextUsageCumulative:'Thread total'});
 Object.assign(T.zh,{officialPlan:'官方计划',officialPlanProgress:'第 {current}/{total} 步',planCompleted:'已完成',planInProgress:'进行中',planPending:'待处理'});
 Object.assign(T.en,{officialPlan:'Official plan',officialPlanProgress:'Step {current}/{total}',planCompleted:'Completed',planInProgress:'In progress',planPending:'Pending'});
+Object.assign(T.zh,{planModeLabel:'计划',planModeExit:'退出计划模式',planModeExitHint:'清除当前会话的官方计划模式',planModeSyncing:'正在同步计划模式…',composerPlanModeOff:'退出计划模式',composerPlanModeOffHint:'调用官方接口关闭当前会话的计划模式',composerPlanDisabled:'已退出官方计划模式'});
+Object.assign(T.en,{planModeLabel:'Plan',planModeExit:'Exit plan mode',planModeExitHint:'Clear the official plan mode for this thread',planModeSyncing:'Syncing plan mode…',composerPlanModeOff:'Exit plan mode',composerPlanModeOffHint:'Call the official API to turn off plan mode for this thread',composerPlanDisabled:'Exited official plan mode'});
 Object.assign(T.zh,{composerMenuTitle:'输入菜单',composerMenuHint:'↑↓ 选择 · Enter 确认 · Esc 关闭',slashMenu:'官方命令',mentionMenu:'添加到会话',composerNoResults:'没有匹配的官方能力',composerFiles:'文件和文件夹',composerFilesHint:'使用官方文件搜索选择工作区路径',composerGoal:'目标',composerGoalHint:'读取或设置当前会话目标',composerPlanMode:'计划模式',composerPlanModeHint:'使用官方协作模式进入计划模式',composerMcp:'MCP',composerMcpHint:'查看官方 MCP 服务状态',composerSkills:'技能',composerSkillsHint:'查看当前工作区技能',composerPlugins:'插件',composerPluginsHint:'查看已安装插件',composerApps:'已安装 App',composerAppsHint:'查看可用 App',composerApis:'官方接口',composerApisHint:'打开官方方法与事件面板',composerNew:'新建会话',composerNewHint:'创建一个新的官方会话',composerCompact:'压缩上下文',composerCompactHint:'调用官方上下文压缩',composerArchive:'归档当前会话',composerArchiveHint:'调用官方归档接口',composerReload:'刷新当前会话',composerReloadHint:'重新读取官方会话状态',composerFileQuery:'搜索工作区文件或文件夹',composerGoalPrompt:'输入当前会话目标（留空可清除）',composerGoalSaved:'会话目标已更新',composerPlanEnabled:'已切换到官方计划模式',composerMentionUnavailable:'当前官方版本未提供此菜单能力',composerFileSearchUnavailable:'当前官方版本未提供文件搜索',composerFileSearchEmpty:'输入文件名开始搜索',composerPluginMention:'插入插件/能力引用',composerSelectedFile:'已添加文件引用',protocolWorkEvent:'工作事件',protocolWorkEventDetails:'查看协议详情',protocolWorkEventCount:'次',protocolWorkUnknown:'其他官方工作事件',protocolWorkSummary:'已收纳到工作过程'});
 Object.assign(T.en,{composerMenuTitle:'Composer menu',composerMenuHint:'↑↓ select · Enter confirm · Esc close',slashMenu:'Official commands',mentionMenu:'Add to thread',composerNoResults:'No matching official capability',composerFiles:'Files and folders',composerFilesHint:'Use the official file search for workspace paths',composerGoal:'Goal',composerGoalHint:'Read or set the current thread goal',composerPlanMode:'Plan mode',composerPlanModeHint:'Use the official collaboration mode for planning',composerMcp:'MCP',composerMcpHint:'View official MCP service status',composerSkills:'Skills',composerSkillsHint:'View skills in the current workspace',composerPlugins:'Plugins',composerPluginsHint:'View installed plugins',composerApps:'Installed Apps',composerAppsHint:'View available Apps',composerApis:'Official APIs',composerApisHint:'Open official methods and events',composerNew:'New thread',composerNewHint:'Create a new official thread',composerCompact:'Compact context',composerCompactHint:'Call the official context compaction method',composerArchive:'Archive current thread',composerArchiveHint:'Call the official archive method',composerReload:'Reload current thread',composerReloadHint:'Reload official thread state',composerFileQuery:'Search workspace files or folders',composerGoalPrompt:'Enter a goal for this thread (blank clears it)',composerGoalSaved:'Thread goal updated',composerPlanEnabled:'Switched to official plan mode',composerMentionUnavailable:'This official version does not expose this menu capability',composerFileSearchUnavailable:'This official version does not expose file search',composerFileSearchEmpty:'Type a filename to search',composerPluginMention:'Insert a plugin/capability reference',composerSelectedFile:'File reference added',protocolWorkEvent:'Work event',protocolWorkEventDetails:'View protocol details',protocolWorkEventCount:'times',protocolWorkUnknown:'Other official work event',protocolWorkSummary:'Collected in the work process'});
 Object.assign(T.zh,{historyLoading:'正在加载会话历史…',historyLoaded:'会话历史已加载',historyFallback:'实验版历史接口不可用，已自动切换到稳定读取'});
@@ -1363,7 +1365,7 @@ const slashItems=()=>[
 const mentionStaticItems=()=>[
   composerMenuItem('files',tr('composerFiles'),tr('composerFilesHint'),'⌕',()=>composerPaletteState().mode='files',{available:hasRequest('fuzzyFileSearch')}),
   composerMenuItem('goal',tr('composerGoal'),tr('composerGoalHint'),'◎',()=>editThreadGoal(),{available:Boolean(state.currentThread?.id&&hasRequest('thread/goal/get')&&hasRequest('thread/goal/set'))}),
-  composerMenuItem('plan',tr('composerPlanMode'),tr('composerPlanModeHint'),'☼',()=>setOfficialPlanMode(),{available:Boolean(state.currentThread?.id&&hasRequest('thread/settings/update'))}),
+  composerMenuItem('plan',planModeEnabledForThread()?tr('composerPlanModeOff'):tr('composerPlanMode'),planModeEnabledForThread()?tr('composerPlanModeOffHint'):tr('composerPlanModeHint'),'☼',()=>toggleOfficialPlanMode(),{available:Boolean(state.currentThread?.id&&hasRequest('thread/settings/update'))}),
 ].filter(item=>item.available!==false);
 const mentionCapabilityItems=()=>{
   const groups=state.capabilities?.groups||[],items=[];
@@ -1394,10 +1396,7 @@ async function editThreadGoal(){
   closeComposerPalette();if(!requireWebWrite(state.currentThread?.id))return;const threadId=state.currentThread?.id;if(!threadId||!hasRequest('thread/goal/get')||!hasRequest('thread/goal/set')){toast(tr('composerMentionUnavailable'),'warning');return}
   try{const current=await rpc('thread/goal/get',{threadId:String(threadId)}),old=String(current?.objective||current?.goal?.objective||current?.goal||'');const objective=window.prompt(tr('composerGoalPrompt'),old);if(objective===null)return;await rpc('thread/goal/set',{threadId:String(threadId),objective:objective.trim()||null,status:objective.trim()?'active':null});toast(tr('composerGoalSaved'))}catch(error){toast(`${tr('sendFailed')}: ${error.message}`,'error')}
 }
-async function setOfficialPlanMode(){
-  closeComposerPalette();if(!requireWebWrite(state.currentThread?.id))return;const threadId=state.currentThread?.id;if(!threadId||!hasRequest('thread/settings/update')){toast(tr('composerMentionUnavailable'),'warning');return}
-  const model=$('modelSelect')?.value||state.models?.[0]?.id||state.meta?.model||'gpt-5';const effort=$('effortSelect')?.value||null;try{await rpc('thread/settings/update',{threadId:String(threadId),collaborationMode:{mode:'plan',settings:{model,reasoning_effort:effort||null}}});toast(tr('composerPlanEnabled'))}catch(error){toast(`${tr('sendFailed')}: ${error.message}`,'error')}
-}
+async function setOfficialPlanMode(){return toggleOfficialPlanMode()}
 async function chooseComposerPaletteItem(item){
   const s=composerPaletteState(),ctx=composerPaletteContext(),keepsDraft=item.id==='files'||item.id.startsWith('file-')||item.id.startsWith('cap-');
   if(s.mode==='files'&&item.id.startsWith('file-')){await item.action();return}
@@ -1425,3 +1424,34 @@ $('prompt')?.addEventListener('input',updateComposerPalette);
 document.addEventListener('keydown',event=>{if(event.target===$('prompt')&&handleComposerPaletteKeydown(event))event.stopImmediatePropagation()},true);
 $('prompt')?.addEventListener('keydown',event=>{if(handleComposerPaletteKeydown(event))return;if(event.key==='Escape')closeComposerPalette()});
 document.addEventListener('pointerdown',event=>{if(!$('composerCard')?.contains(event.target))closeComposerPalette()});
+
+/* Official plan mode is a persisted per-thread collaboration setting. The
+ * composer pill is only visible after the official update succeeds, and the
+ * same button clears the setting with collaborationMode: null. */
+const PLAN_MODE_STORAGE_KEY='cweb_plan_mode_by_thread_v1';
+function readPlanModeStore(){try{const value=JSON.parse(localStorage.getItem(PLAN_MODE_STORAGE_KEY)||'{}');return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}catch{return{}}}
+function writePlanModeStore(){try{const entries=Object.entries(state.planModeByThread||{}).slice(-128);localStorage.setItem(PLAN_MODE_STORAGE_KEY,JSON.stringify(Object.fromEntries(entries)))}catch{/* local persistence is optional */}}
+state.planModeByThread=state.planModeByThread||readPlanModeStore();
+state.planModeBusy=Boolean(state.planModeBusy);
+function planModeEnabledForThread(threadId=state.currentThread?.id){const id=String(threadId||'');return Boolean(id&&state.planModeByThread?.[id]===true)}
+function setPlanModeEnabled(threadId,enabled){const id=String(threadId||'');if(!id)return;if(enabled)state.planModeByThread[id]=true;else delete state.planModeByThread[id];writePlanModeStore();renderPlanModeToggle();if(composerPaletteContext())updateComposerPalette()}
+function officialPlanModeValue(value){const candidates=[value?.collaborationMode,value?.collaboration_mode,value?.threadSettings?.collaborationMode,value?.threadSettings?.collaboration_mode,value?.settings?.collaborationMode,value?.thread?.settings?.collaborationMode];const candidate=candidates.find(item=>item!==undefined);if(candidate===undefined)return null;if(candidate===null)return false;return String(candidate?.mode||'')==='plan'}
+function syncPlanModeFromOfficial(value,threadId=''){const p=value?.params||value||{},id=String(threadId||p.threadId||p.thread?.id||p.threadSettings?.threadId||'');if(!id)return false;const enabled=officialPlanModeValue(p);if(enabled===null)return false;setPlanModeEnabled(id,enabled);return true}
+function renderPlanModeToggle(){const node=$('planModeToggle');if(!node)return;const active=planModeEnabledForThread(),label=$('planModeLabel');node.classList.toggle('hidden',!active);node.disabled=Boolean(state.planModeBusy);node.setAttribute('aria-hidden',String(!active));node.setAttribute('aria-pressed',String(active));node.title=state.planModeBusy?tr('planModeSyncing'):tr('planModeExit');if(label)label.textContent=tr('planModeLabel')}
+async function toggleOfficialPlanMode(){
+  closeComposerPalette();const threadId=state.currentThread?.id;if(!threadId||!requireWebWrite(threadId))return;if(state.planModeBusy)return;if(!hasRequest('thread/settings/update')){toast(tr('composerMentionUnavailable'),'warning');return}
+  const enabled=!planModeEnabledForThread(threadId);state.planModeBusy=true;renderPlanModeToggle();
+  const model=$('modelSelect')?.value||state.models?.[0]?.id||state.meta?.model||'gpt-5',effort=$('effortSelect')?.value||null,collaborationMode=enabled?{mode:'plan',settings:{model,reasoning_effort:effort||null}}:null;
+  try{const result=await rpc('thread/settings/update',{threadId:String(threadId),collaborationMode});if(!syncPlanModeFromOfficial(result,threadId))setPlanModeEnabled(threadId,enabled);toast(tr(enabled?'composerPlanEnabled':'composerPlanDisabled'))}catch(error){toast(`${tr('sendFailed')}: ${error.message}`,'error')}finally{state.planModeBusy=false;renderPlanModeToggle()}
+}
+protocolWorkHandledMethods.add('thread/settings/updated');
+const appendLiveBeforePlanModeState=appendLive;
+appendLive=message=>{if(String(message?.method||'')==='thread/settings/updated')syncPlanModeFromOfficial(message);return appendLiveBeforePlanModeState(message)};
+const appendLiveLegacyBeforePlanModeState=appendLiveLegacy;
+appendLiveLegacy=message=>{if(String(message?.method||'')==='thread/settings/updated')syncPlanModeFromOfficial(message);return appendLiveLegacyBeforePlanModeState(message)};
+const renderThreadBeforePlanModeState=renderThread;
+renderThread=thread=>{const result=renderThreadBeforePlanModeState(thread);syncPlanModeFromOfficial(thread,thread?.id);renderPlanModeToggle();return result};
+const clearSelectedThreadBeforePlanModeState=clearSelectedThread;
+clearSelectedThread=(threadId,options={})=>{const result=clearSelectedThreadBeforePlanModeState(threadId,options);renderPlanModeToggle();return result};
+$('planModeToggle')?.addEventListener('click',()=>{void toggleOfficialPlanMode()});
+renderPlanModeToggle();

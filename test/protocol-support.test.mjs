@@ -51,6 +51,7 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /config\/batchWrite/);
   assert.match(app, /model_reasoning_effort/);
   assert.match(html, /id="composerMode"/);
+  assert.match(html, /id="planModeToggle"/);
   assert.match(html, /id="contextIndicator"/);
   assert.match(html, /id="compactThread"/);
   assert.match(html, /id="contextUsage"/);
@@ -264,6 +265,12 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /protocolMismatch'&&!e\.payload\?\.accepted/);
   assert.match(app, /terminalInteraction/);
   assert.match(app, /composerPalette/);
+  assert.match(app, /function toggleOfficialPlanMode/);
+  assert.match(app, /function syncPlanModeFromOfficial/);
+  assert.match(app, /collaborationMode=enabled\?/);
+  assert.match(app, /thread\/settings\/updated/);
+  assert.match(app, /planModeEnabledForThread/);
+  assert.match(css, /\.plan-mode-toggle/);
   assert.match(server, /accepted:\s*true/);
   assert.match(css, /grid-template-columns:minmax\(0,1fr\) auto/);
   assert.match(css, /@media\(max-width:480px\)\{\s*\.composer-toolbar\{grid-template-columns:minmax\(0,1fr\)/);
