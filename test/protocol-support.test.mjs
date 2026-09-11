@@ -277,6 +277,16 @@ test('composer keeps workspace selection in the primary new-thread flow and supp
   assert.match(app, /collaborationMode=enabled\?/);
   assert.match(app, /thread\/settings\/updated/);
   assert.match(app, /planModeEnabledForThread/);
+  assert.match(app, /planModeAuthority/);
+  assert.match(app, /planModeWaiters/);
+  assert.match(app, /extractPlanModeState/);
+  assert.match(app, /buildCollaborationMode/);
+  assert.match(app, /cwebSealedCommitAcceptedPlanMode/);
+  assert.match(app, /PLAN_MODE_UNCONFIRMED/);
+  assert.match(app, /CWEB_SEALED_PLAN_ACK_TIMEOUT_MS/);
+  assert.match(app, /await ensureThreadLoaded\(id\)/);
+  assert.match(app, /collaborationMode:buildCollaborationMode\(mode,model,effort\)/);
+  assert.doesNotMatch(app, /if\(!syncPlanModeFromOfficial\(result,threadId\)\)setPlanModeEnabled\(threadId,enabled\)/);
   assert.match(css, /\.plan-mode-toggle/);
   assert.match(server, /accepted:\s*true/);
   assert.match(css, /grid-template-columns:minmax\(0,1fr\) auto/);

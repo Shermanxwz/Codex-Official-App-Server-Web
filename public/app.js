@@ -2,6 +2,7 @@ import { THREAD_ITEM_TYPES, TIMELINE_DELTA_NOTIFICATIONS, protocolSupportSummary
 import { classifyOfficialActivity, inferOfficialActiveTurnId, isActiveOfficialStatus as isOfficialActiveStatus, statusKey as officialStatusKey } from './live-activity.js';
 import { hasOfficialHistoryPaging, isUnsupportedOfficialMethodError } from './history-compat.js';
 import { appendOfficialEvent } from './official-events.js';
+import { buildCollaborationMode, extractPlanModeState } from './plan-mode-state.js';
 const nativeStyles=document.createElement('link');nativeStyles.rel='stylesheet';nativeStyles.href='/native.css';document.head.append(nativeStyles);
 const $=id=>document.getElementById(id);
 const LAST_THREAD_KEY='cweb_last_thread';
@@ -19,8 +20,8 @@ Object.assign(T.zh,{contextUsageLabel:'上下文',contextUsageUsed:'已用',cont
 Object.assign(T.en,{contextUsageLabel:'Context',contextUsageUsed:'Used',contextUsageRemaining:'Remaining',contextUsageWindow:'Limit',contextUsageUnknown:'The official runtime has not returned this model’s context limit',contextUsageSource:'Official token usage · current model',contextUsageOverLimit:'Context limit reached',contextUsageCumulative:'Thread total'});
 Object.assign(T.zh,{officialPlan:'官方计划',officialPlanProgress:'第 {current}/{total} 步',planCompleted:'已完成',planInProgress:'进行中',planPending:'待处理'});
 Object.assign(T.en,{officialPlan:'Official plan',officialPlanProgress:'Step {current}/{total}',planCompleted:'Completed',planInProgress:'In progress',planPending:'Pending'});
-Object.assign(T.zh,{planModeLabel:'计划',planModeExit:'退出计划模式',planModeExitHint:'清除当前会话的官方计划模式',planModeSyncing:'正在同步计划模式…',composerPlanModeOff:'退出计划模式',composerPlanModeOffHint:'调用官方接口关闭当前会话的计划模式',composerPlanDisabled:'已退出官方计划模式'});
-Object.assign(T.en,{planModeLabel:'Plan',planModeExit:'Exit plan mode',planModeExitHint:'Clear the official plan mode for this thread',planModeSyncing:'Syncing plan mode…',composerPlanModeOff:'Exit plan mode',composerPlanModeOffHint:'Call the official API to turn off plan mode for this thread',composerPlanDisabled:'Exited official plan mode'});
+Object.assign(T.zh,{planModeLabel:'计划',planModeExit:'退出计划模式',planModeExitHint:'清除当前会话的官方计划模式',planModeSyncing:'正在同步计划模式…',planModeSyncFailed:'官方未确认计划模式切换，界面保持原状态',composerPlanModeOff:'退出计划模式',composerPlanModeOffHint:'调用官方接口关闭当前会话的计划模式',composerPlanDisabled:'已退出官方计划模式'});
+Object.assign(T.en,{planModeLabel:'Plan',planModeExit:'Exit plan mode',planModeExitHint:'Clear the official plan mode for this thread',planModeSyncing:'Syncing plan mode…',planModeSyncFailed:'The official runtime did not confirm the mode change; the current state was kept',composerPlanModeOff:'Exit plan mode',composerPlanModeOffHint:'Call the official API to turn off plan mode for this thread',composerPlanDisabled:'Exited official plan mode'});
 Object.assign(T.zh,{composerMenuTitle:'输入菜单',composerMenuHint:'↑↓ 选择 · Enter 确认 · Esc 关闭',slashMenu:'官方命令',mentionMenu:'添加到会话',composerNoResults:'没有匹配的官方能力',composerFiles:'文件和文件夹',composerFilesHint:'使用官方文件搜索选择工作区路径',composerGoal:'目标',composerGoalHint:'读取或设置当前会话目标',composerPlanMode:'计划模式',composerPlanModeHint:'使用官方协作模式进入计划模式',composerMcp:'MCP',composerMcpHint:'查看官方 MCP 服务状态',composerSkills:'技能',composerSkillsHint:'查看当前工作区技能',composerPlugins:'插件',composerPluginsHint:'查看已安装插件',composerApps:'已安装 App',composerAppsHint:'查看可用 App',composerApis:'官方接口',composerApisHint:'打开官方方法与事件面板',composerNew:'新建会话',composerNewHint:'创建一个新的官方会话',composerCompact:'压缩上下文',composerCompactHint:'调用官方上下文压缩',composerArchive:'归档当前会话',composerArchiveHint:'调用官方归档接口',composerReload:'刷新当前会话',composerReloadHint:'重新读取官方会话状态',composerFileQuery:'搜索工作区文件或文件夹',composerGoalPrompt:'输入当前会话目标（留空可清除）',composerGoalSaved:'会话目标已更新',composerPlanEnabled:'已切换到官方计划模式',composerMentionUnavailable:'当前官方版本未提供此菜单能力',composerFileSearchUnavailable:'当前官方版本未提供文件搜索',composerFileSearchEmpty:'输入文件名开始搜索',composerPluginMention:'插入插件/能力引用',composerSelectedFile:'已添加文件引用',protocolWorkEvent:'工作事件',protocolWorkEventDetails:'查看协议详情',protocolWorkEventCount:'次',protocolWorkUnknown:'其他官方工作事件',protocolWorkSummary:'已收纳到工作过程'});
 Object.assign(T.en,{composerMenuTitle:'Composer menu',composerMenuHint:'↑↓ select · Enter confirm · Esc close',slashMenu:'Official commands',mentionMenu:'Add to thread',composerNoResults:'No matching official capability',composerFiles:'Files and folders',composerFilesHint:'Use the official file search for workspace paths',composerGoal:'Goal',composerGoalHint:'Read or set the current thread goal',composerPlanMode:'Plan mode',composerPlanModeHint:'Use the official collaboration mode for planning',composerMcp:'MCP',composerMcpHint:'View official MCP service status',composerSkills:'Skills',composerSkillsHint:'View skills in the current workspace',composerPlugins:'Plugins',composerPluginsHint:'View installed plugins',composerApps:'Installed Apps',composerAppsHint:'View available Apps',composerApis:'Official APIs',composerApisHint:'Open official methods and events',composerNew:'New thread',composerNewHint:'Create a new official thread',composerCompact:'Compact context',composerCompactHint:'Call the official context compaction method',composerArchive:'Archive current thread',composerArchiveHint:'Call the official archive method',composerReload:'Reload current thread',composerReloadHint:'Reload official thread state',composerFileQuery:'Search workspace files or folders',composerGoalPrompt:'Enter a goal for this thread (blank clears it)',composerGoalSaved:'Thread goal updated',composerPlanEnabled:'Switched to official plan mode',composerMentionUnavailable:'This official version does not expose this menu capability',composerFileSearchUnavailable:'This official version does not expose file search',composerFileSearchEmpty:'Type a filename to search',composerPluginMention:'Insert a plugin/capability reference',composerSelectedFile:'File reference added',protocolWorkEvent:'Work event',protocolWorkEventDetails:'View protocol details',protocolWorkEventCount:'times',protocolWorkUnknown:'Other official work event',protocolWorkSummary:'Collected in the work process'});
 Object.assign(T.zh,{historyLoading:'正在加载会话历史…',historyLoaded:'会话历史已加载',historyFallback:'实验版历史接口不可用，已自动切换到稳定读取'});
@@ -1438,12 +1439,12 @@ function planModeEnabledForThread(threadId=state.currentThread?.id){const id=Str
 function setPlanModeEnabled(threadId,enabled){const id=String(threadId||'');if(!id)return;if(enabled)state.planModeByThread[id]=true;else delete state.planModeByThread[id];writePlanModeStore();renderPlanModeToggle();if(composerPaletteContext())updateComposerPalette()}
 function officialPlanModeValue(value){const candidates=[value?.collaborationMode,value?.collaboration_mode,value?.threadSettings?.collaborationMode,value?.threadSettings?.collaboration_mode,value?.settings?.collaborationMode,value?.thread?.settings?.collaborationMode];const candidate=candidates.find(item=>item!==undefined);if(candidate===undefined)return null;if(candidate===null)return false;return String(candidate?.mode||'')==='plan'}
 function syncPlanModeFromOfficial(value,threadId=''){const p=value?.params||value||{},id=String(threadId||p.threadId||p.thread?.id||p.threadSettings?.threadId||'');if(!id)return false;const enabled=officialPlanModeValue(p);if(enabled===null)return false;setPlanModeEnabled(id,enabled);return true}
-function renderPlanModeToggle(){const node=$('planModeToggle');if(!node)return;const active=planModeEnabledForThread(),label=$('planModeLabel');node.classList.toggle('hidden',!active);node.disabled=Boolean(state.planModeBusy);node.setAttribute('aria-hidden',String(!active));node.setAttribute('aria-pressed',String(active));node.title=state.planModeBusy?tr('planModeSyncing'):tr('planModeExit');if(label)label.textContent=tr('planModeLabel')}
+function renderPlanModeToggle(){const node=$('planModeToggle');if(!node)return;const active=planModeEnabledForThread(),busy=Boolean(state.planModeBusy&&state.currentThread?.id),visible=active||busy,label=$('planModeLabel');node.classList.toggle('hidden',!visible);node.disabled=Boolean(state.planModeBusy);node.setAttribute('aria-hidden',String(!visible));node.setAttribute('aria-pressed',String(active));node.title=busy?tr('planModeSyncing'):tr('planModeExit');if(label)label.textContent=busy?tr('planModeSyncing'):tr('planModeLabel')}
 async function toggleOfficialPlanMode(){
   closeComposerPalette();const threadId=state.currentThread?.id;if(!threadId||!requireWebWrite(threadId))return;if(state.planModeBusy)return;if(!hasRequest('thread/settings/update')){toast(tr('composerMentionUnavailable'),'warning');return}
   const enabled=!planModeEnabledForThread(threadId);state.planModeBusy=true;renderPlanModeToggle();
   const model=$('modelSelect')?.value||state.models?.[0]?.id||state.meta?.model||'gpt-5',effort=$('effortSelect')?.value||null,collaborationMode=enabled?{mode:'plan',settings:{model,reasoning_effort:effort||null}}:null;
-  try{const result=await rpc('thread/settings/update',{threadId:String(threadId),collaborationMode});if(!syncPlanModeFromOfficial(result,threadId))setPlanModeEnabled(threadId,enabled);toast(tr(enabled?'composerPlanEnabled':'composerPlanDisabled'))}catch(error){toast(`${tr('sendFailed')}: ${error.message}`,'error')}finally{state.planModeBusy=false;renderPlanModeToggle()}
+  try{const result=await rpc('thread/settings/update',{threadId:String(threadId),collaborationMode});syncPlanModeFromOfficial(result,threadId);toast(tr(enabled?'composerPlanEnabled':'composerPlanDisabled'))}catch(error){toast(`${tr('sendFailed')}: ${error.message}`,'error')}finally{state.planModeBusy=false;renderPlanModeToggle()}
 }
 protocolWorkHandledMethods.add('thread/settings/updated');
 const appendLiveBeforePlanModeState=appendLive;
@@ -1496,3 +1497,106 @@ const appendLiveLegacyBeforeAccountUsage=appendLiveLegacy;
 appendLiveLegacy=message=>{const result=appendLiveLegacyBeforeAccountUsage(message);const method=String(message?.method||'');if(['account/updated','account/rateLimits/updated'].includes(method)&&!$('accountUsageModal')?.classList.contains('hidden'))void loadAccountUsage(true);return result};
 const applyI18nBeforeAccountUsage=applyI18n;
 applyI18n=()=>{const result=applyI18nBeforeAccountUsage();if(state.accountUsage&&!$('accountUsageModal')?.classList.contains('hidden'))renderAccountUsage(state.accountUsage);return result};
+
+/* Sealed Plan-mode boundary.
+ *
+ * The official settings update response is intentionally empty in the
+ * current App Server schema.  A successful official RPC is still an
+ * authoritative write acknowledgement; thread/settings/updated remains the
+ * preferred live reconciliation event.  This matters for idempotent writes:
+ * the official runtime may not emit a second notification when the thread is
+ * already in the requested mode.
+ * Normal turns also carry an explicit collaboration mode, preventing a
+ * stale browser-only flag from silently re-entering Plan mode.
+ */
+const CWEB_SEALED_PLAN_ACK_TIMEOUT_MS=10000;
+state.planModeAuthority=state.planModeAuthority instanceof Map?state.planModeAuthority:new Map();
+state.planModeAuthorityRevision=state.planModeAuthorityRevision instanceof Map?state.planModeAuthorityRevision:new Map();
+state.planModeWaiters=state.planModeWaiters instanceof Map?state.planModeWaiters:new Map();
+state.planModeTransition=state.planModeTransition instanceof Map?state.planModeTransition:new Map();
+state.planModeObservedMessages=state.planModeObservedMessages instanceof WeakSet?state.planModeObservedMessages:new WeakSet();
+
+function cwebSealedRemovePlanWaiter(threadId,waiter){
+  const id=String(threadId||''),list=state.planModeWaiters.get(id);if(!list)return false;
+  const index=list.indexOf(waiter);if(index<0)return false;list.splice(index,1);
+  if(list.length)state.planModeWaiters.set(id,list);else state.planModeWaiters.delete(id);
+  return true;
+}
+function cwebSealedResolvePlanWaiters(snapshot){
+  const id=String(snapshot?.threadId||''),list=state.planModeWaiters.get(id);if(!id||!list?.length)return;
+  const remaining=[];
+  for(const waiter of list){
+    if(snapshot.revision>waiter.minRevision&&snapshot.mode===waiter.mode){clearTimeout(waiter.timer);waiter.resolve(snapshot)}
+    else remaining.push(waiter);
+  }
+  if(remaining.length)state.planModeWaiters.set(id,remaining);else state.planModeWaiters.delete(id);
+}
+function cwebSealedPlanAckWaiter(threadId,mode,minRevision){
+  const id=String(threadId||''),current=state.planModeAuthority.get(id);
+  if(current&&current.revision>minRevision&&current.mode===mode)return{promise:Promise.resolve(current),cancel(){}};
+  let record=null,rejectPromise=null;
+  const promise=new Promise((resolve,reject)=>{rejectPromise=reject;record={id,mode,minRevision,resolve,reject,timer:null}});
+  record.timer=setTimeout(()=>{if(cwebSealedRemovePlanWaiter(id,record))rejectPromise(Object.assign(new Error(tr('planModeSyncFailed')),{code:'PLAN_MODE_UNCONFIRMED'}))},CWEB_SEALED_PLAN_ACK_TIMEOUT_MS);
+  const list=state.planModeWaiters.get(id)||[];list.push(record);state.planModeWaiters.set(id,list);
+  return{
+    promise,
+    cancel(reason=new Error(tr('planModeSyncFailed'))){
+      if(!cwebSealedRemovePlanWaiter(id,record))return;
+      clearTimeout(record.timer);rejectPromise(reason);
+    },
+  };
+}
+function cwebSealedObservePlanMode(value,fallbackThreadId=''){
+  const snapshot=extractPlanModeState(value,fallbackThreadId);if(!snapshot)return false;
+  if(value&&typeof value==='object'){if(state.planModeObservedMessages.has(value))return true;state.planModeObservedMessages.add(value)}
+  const id=String(snapshot.threadId),revision=Number(state.planModeAuthorityRevision.get(id)||0)+1;
+  const authoritative={...snapshot,revision,observedAt:Date.now()};
+  state.planModeAuthority.set(id,authoritative);state.planModeAuthorityRevision.set(id,revision);
+  setPlanModeEnabled(id,authoritative.enabled);cwebSealedResolvePlanWaiters(authoritative);return true;
+}
+function cwebSealedCommitAcceptedPlanMode(threadId,mode){
+  return cwebSealedObservePlanMode({threadId,collaborationMode:{mode,settings:{}}},threadId);
+}
+
+const cwebSealedPreviousSyncPlanModeFromOfficial=syncPlanModeFromOfficial;
+syncPlanModeFromOfficial=(value,threadId='')=>cwebSealedObservePlanMode(value,threadId)||cwebSealedPreviousSyncPlanModeFromOfficial(value,threadId);
+const cwebSealedPreviousPlanModeEnabledForThread=planModeEnabledForThread;
+planModeEnabledForThread=(threadId=state.currentThread?.id)=>{
+  const id=String(threadId||''),authority=state.planModeAuthority.get(id);
+  return authority?authority.enabled:cwebSealedPreviousPlanModeEnabledForThread(threadId);
+};
+
+const cwebSealedPreviousEnsureThreadLoaded=ensureThreadLoaded;
+ensureThreadLoaded=async(...args)=>{const result=await cwebSealedPreviousEnsureThreadLoaded(...args);cwebSealedObservePlanMode(result,args[0]);return result};
+
+toggleOfficialPlanMode=async()=>{
+  closeComposerPalette();const threadId=state.currentThread?.id;if(!threadId||!requireWebWrite(threadId)||state.planModeBusy)return;
+  if(!hasRequest('thread/settings/update')){toast(tr('composerMentionUnavailable'),'warning');return}
+  const id=String(threadId),enabled=planModeEnabledForThread(id),desiredMode=enabled?'default':'plan';
+  const model=$('modelSelect')?.value||state.models?.[0]?.id||state.meta?.model||'gpt-5',effort=$('effortSelect')?.value||null;
+  const minRevision=Number(state.planModeAuthorityRevision.get(id)||0),waiter=cwebSealedPlanAckWaiter(id,desiredMode,minRevision);
+  state.planModeTransition.set(id,{mode:desiredMode,minRevision,startedAt:Date.now()});state.planModeBusy=true;renderPlanModeToggle();toast(tr('planModeSyncing'));
+  try{
+    await ensureThreadLoaded(id);
+    const result=await rpc('thread/settings/update',{threadId:id,collaborationMode:buildCollaborationMode(desiredMode,model,effort)});
+    if(!cwebSealedObservePlanMode(result,id))cwebSealedCommitAcceptedPlanMode(id,desiredMode);
+    await waiter.promise;toast(tr(desiredMode==='plan'?'composerPlanEnabled':'composerPlanDisabled'));
+  }catch(error){
+    waiter.cancel(error);await waiter.promise.catch(()=>{});
+    const message=error?.code==='PLAN_MODE_UNCONFIRMED'?error.message:`${tr('sendFailed')}: ${error?.message||error}`;toast(message,'error');
+  }finally{state.planModeTransition.delete(id);state.planModeBusy=false;renderPlanModeToggle()}
+};
+
+const cwebSealedPreviousRpc=rpc;
+rpc=async(method,params={},options={})=>{
+  const input=params&&typeof params==='object'?params:{};
+  if(method==='turn/start'&&hasRequest('thread/settings/update')&&input.threadId&&!Object.hasOwn(input,'collaborationMode')){
+    const id=String(input.threadId),authority=state.planModeAuthority.get(id),mode=authority?.mode==='plan'?'plan':'default';
+    const model=input.model||state.models?.[0]?.id||state.meta?.model||'gpt-5';
+    const effort=input.effort??input.reasoning_effort??$('effortSelect')?.value??null;
+    params={...input,collaborationMode:buildCollaborationMode(mode,model,effort)};
+  }
+  return cwebSealedPreviousRpc(method,params,options);
+};
+
+renderPlanModeToggle();

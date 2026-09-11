@@ -20,8 +20,8 @@ const failures=[];
 for(const file of files){const rel=path.relative(root,file),text=fs.readFileSync(file,'utf8');for(const rule of rules){if(rule.allow.some(x=>rel.endsWith(x)))continue;if(rule.re.test(text))failures.push(`${rule.name}: ${rel}`);}}
 const required=[
  'src/schema-registry.mjs','src/codex-client.mjs','src/server.mjs','src/dynamic-tool-host.mjs','scripts/official-interface-audit.mjs','scripts/runtime-smoke.mjs','scripts/gateway-smoke.mjs','scripts/proxy-env.mjs',
- 'public/index.html','public/app.js','public/history-compat.js','public/official-events.js','public/protocol-support.js','public/mcp-app-core.js','public/mcp-app-host.js','public/mcp-sandbox-proxy.js','public/mcp-app.css',
- 'README.md','README.zh-CN.md','SECURITY.md','ARCHITECTURE.md','docs/PRODUCTION_SEAL.md','docs/ARCHIVE_CONTRACT.md','docs/PROTOCOL_PARITY.md','docs/UPSTREAM_VALIDATION.md','docs/HOSTS.md',
+ 'public/index.html','public/app.js','public/plan-mode-state.js','public/history-compat.js','public/official-events.js','public/protocol-support.js','public/mcp-app-core.js','public/mcp-app-host.js','public/mcp-sandbox-proxy.js','public/mcp-app.css',
+ 'README.md','README.zh-CN.md','SECURITY.md','ARCHITECTURE.md','docs/PRODUCTION_SEAL.md','docs/ARCHIVE_CONTRACT.md','docs/PROTOCOL_PARITY.md','docs/UPSTREAM_VALIDATION.md','docs/HOSTS.md','scripts/plan-mode-smoke.mjs',
  'deploy/codex-app-server-web.service','deploy/codex-official-app-server.service','scripts/source-manifest.mjs','SOURCE_MANIFEST.sha256'
 ];
 for(const rel of required)if(!fs.existsSync(path.join(root,rel)))failures.push(`missing required file: ${rel}`);
@@ -36,7 +36,7 @@ if(index.includes('favicon.svg')||index.includes('<svg'))failures.push('legacy b
 if((index.match(/class="brand-image"/g)||[]).length!==3)failures.push('brand icon must be used by sidebar, empty state, and login state');
 if(fs.existsSync(path.join(root,'src','local-browser-mcp.mjs')))failures.push('custom browser MCP must not be bundled');
 if(fs.existsSync(path.join(root,'test','local-browser-mcp.test.mjs')))failures.push('custom browser MCP test must not be bundled');
-for(const script of ['test','check','audit:official','smoke:runtime','smoke:gateway','seal','seal:core','seal:protocol','manifest:verify'])if(!pkg.scripts?.[script])failures.push(`package script missing: ${script}`);
+for(const script of ['test','check','audit:official','smoke:runtime','smoke:gateway','smoke:plan-mode','seal','seal:core','seal:protocol','manifest:verify'])if(!pkg.scripts?.[script])failures.push(`package script missing: ${script}`);
 const server=fs.readFileSync(path.join(root,'src/server.mjs'),'utf8');
 for(const needle of ["'METHOD_NOT_IN_OFFICIAL_SCHEMA'","'NOTIFICATION_NOT_IN_OFFICIAL_SCHEMA'","'INVALID_PARAMS_OBJECT'","'INVALID_JSON_OBJECT'","'INVALID_METHOD'","'INVALID_RESPONSE_ERROR'",'jsonObjectBody','methodEnvelope','registry.getServerRequest','registry.getServerNotification','INITIALIZE_IS_MANAGED_BY_GATEWAY','scheduleCodexRestart','CWEB_PUBLIC_ORIGIN','server.headersTimeout','server.requestTimeout',"message.method === 'currentTime/read'",'dynamicToolHost.canHandle','MCP_APPS_EXTENSION','MCP_APPS_MIME','mcpAppsDoubleIframeSandbox: true','properties?.dynamicTools',"eventFrame('heartbeat'",'SSE_FRAME_SAFETY_MARGIN','sseEventMaxBytes','bytes > config.sseMaxBufferBytes','AUTONOMOUS_MODE_UNSUPPORTED','autonomousExecutionEnabled','danger-full-access','EXPERIMENTAL_ONLY_CLIENT_REQUESTS','EXPERIMENTAL_METHOD_DISABLED',"'plugin/list'","'plugin/read'","'plugin/install'","'plugin/uninstall'"])if(!server.includes(needle))failures.push(`server contract missing: ${needle}`);
 const client=fs.readFileSync(path.join(root,'src/codex-client.mjs'),'utf8');
